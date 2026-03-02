@@ -52,16 +52,19 @@ func GetIncomes(c *gin.Context) {
 
 	var incomes []models.Income
 	var total int64
+	var totalAmount float64
 
 	database.DB.Model(&models.Income{}).Where("project_id = ?", projectId).Count(&total)
+	database.DB.Model(&models.Income{}).Where("project_id = ?", projectId).Select("COALESCE(SUM(amount), 0)").Scan(&totalAmount)
 	database.DB.Where("project_id = ?", projectId).Order("created_at desc").Offset(offset).Limit(limit).Find(&incomes)
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": incomes,
 		"meta": gin.H{
-			"total": total,
-			"page":  page,
-			"limit": limit,
+			"total":        total,
+			"total_amount": totalAmount,
+			"page":         page,
+			"limit":        limit,
 		},
 	})
 }
@@ -79,16 +82,19 @@ func GetExpenses(c *gin.Context) {
 
 	var expenses []models.Expense
 	var total int64
+	var totalAmount float64
 
 	database.DB.Model(&models.Expense{}).Where("project_id = ?", projectId).Count(&total)
+	database.DB.Model(&models.Expense{}).Where("project_id = ?", projectId).Select("COALESCE(SUM(amount), 0)").Scan(&totalAmount)
 	database.DB.Where("project_id = ?", projectId).Order("expense_date desc, created_at desc").Offset(offset).Limit(limit).Find(&expenses)
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": expenses,
 		"meta": gin.H{
-			"total": total,
-			"page":  page,
-			"limit": limit,
+			"total":        total,
+			"total_amount": totalAmount,
+			"page":         page,
+			"limit":        limit,
 		},
 	})
 }
@@ -121,9 +127,17 @@ func GetProjectStats(c *gin.Context) {
 		Order("month asc").
 		Scan(&expenseStats)
 
+	var totalIncome float64
+	var totalExpense float64
+	database.DB.Model(&models.Income{}).Where("project_id = ?", projectId).Select("COALESCE(SUM(amount), 0)").Scan(&totalIncome)
+	database.DB.Model(&models.Expense{}).Where("project_id = ?", projectId).Select("COALESCE(SUM(amount), 0)").Scan(&totalExpense)
+
 	c.JSON(http.StatusOK, gin.H{
-		"project_id": projectId,
-		"incomes":    incomeStats,
-		"expenses":   expenseStats,
+		"project_id":    projectId,
+		"incomes":       incomeStats,
+		"expenses":      expenseStats,
+		"total_income":  totalIncome,
+		"total_expense": totalExpense,
+		"balance":       totalIncome - totalExpense,
 	})
 }

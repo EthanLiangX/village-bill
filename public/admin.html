@@ -252,11 +252,12 @@
                             </li>
                             <li v-if="incomes.length === 0" class="text-center text-gray-400 text-xs py-4">暂无记录</li>
                         </ul>
-                        <div v-if="incomesTotal > incomes.length" class="mt-4 text-center">
+                        <div v-if="incomesTotalAmount > loadedIncomesTotal" class="mt-4 text-center">
                             <button @click="loadMoreIncomes" type="button" :disabled="loadingMoreIncomes"
                                 class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 font-medium py-1.5 px-4 rounded-full transition-colors flex items-center justify-center mx-auto">
                                 <i v-if="loadingMoreIncomes" class="fa-solid fa-spinner fa-spin mr-1"></i>
-                                {{ loadingMoreIncomes ? '正在加载...' : `加载更多 (已显示 ${incomes.length} / 共 ${incomesTotal} 条)`
+                                {{ loadingMoreIncomes ? '正在加载...' : `加载更多 (已显示 ${incomes.length} / 共计
+                                ¥${formatMoney(incomesTotalAmount)})`
                                 }}
                             </button>
                         </div>
@@ -410,12 +411,12 @@
                             </li>
                             <li v-if="expenses.length === 0" class="text-center text-gray-400 text-xs py-4">暂无记录</li>
                         </ul>
-                        <div v-if="expensesTotal > expenses.length" class="mt-4 text-center">
+                        <div v-if="expensesTotalAmount > loadedExpensesTotal" class="mt-4 text-center">
                             <button @click="loadMoreExpenses" type="button" :disabled="loadingMoreExpenses"
                                 class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 font-medium py-1.5 px-4 rounded-full transition-colors flex items-center justify-center mx-auto">
                                 <i v-if="loadingMoreExpenses" class="fa-solid fa-spinner fa-spin mr-1"></i>
-                                {{ loadingMoreExpenses ? '正在加载...' : `加载更多 (已显示 ${expenses.length} / 共 ${expensesTotal}
-                                条)` }}
+                                {{ loadingMoreExpenses ? '正在加载...' : `加载更多 (已显示 ${expenses.length} / 共计
+                                ¥${formatMoney(expensesTotalAmount)})` }}
                             </button>
                         </div>
                     </div>
@@ -680,12 +681,14 @@
                 const incomes = ref([])
                 const incomesPage = ref(1)
                 const incomesTotal = ref(0)
+                const incomesTotalAmount = ref(0)
                 const incomeSearchQuery = ref('')
                 const loadingMoreIncomes = ref(false)
 
                 const expenses = ref([])
                 const expensesPage = ref(1)
                 const expensesTotal = ref(0)
+                const expensesTotalAmount = ref(0)
                 const expenseSearchQuery = ref('')
                 const suspenseSearchQuery = ref('')
                 const loadingMoreExpenses = ref(false)
@@ -697,6 +700,7 @@
 
                 const savingRecordId = ref(null)
                 const projectStats = ref({ incomes: [], expenses: [] })
+                const projectSummary = ref({ total_income: 0, total_expense: 0, balance: 0, status: 1 })
 
                 const selectedProjectId = ref(0)
                 const excelFileInput = ref(null)
@@ -739,6 +743,14 @@
                         item.title.toLowerCase().includes(lowerQuery) ||
                         item.handler.toLowerCase().includes(lowerQuery)
                     )
+                })
+
+                const loadedIncomesTotal = computed(() => {
+                    return filteredIncomes.value.reduce((acc, curr) => acc + Number(curr.amount), 0)
+                })
+
+                const loadedExpensesTotal = computed(() => {
+                    return filteredExpenses.value.reduce((acc, curr) => acc + Number(curr.amount), 0)
                 })
 
                 const incomeForm = reactive({
@@ -845,9 +857,12 @@
                         }
 
                         incomesTotal.value = incRes.data.meta?.total || 0
+                        incomesTotalAmount.value = incRes.data.meta?.total_amount || 0
                         expensesTotal.value = expRes.data.meta?.total || 0
+                        expensesTotalAmount.value = expRes.data.meta?.total_amount || 0
 
                         await loadProjectStats()
+                        await loadProjectSummary()
                     } catch (e) {
                         console.error('Failed to load records', e)
                     }
@@ -863,6 +878,22 @@
                         }
                     } catch (e) {
                         console.error('Failed to load stats', e)
+                    }
+                }
+
+                const loadProjectSummary = async () => {
+                    if (!selectedProjectId.value) return
+                    // Instead of a separate API call to /latest, which might be wrong for admin clicking other projects,
+                    // we can rely on loadProjectStats to populate this.
+                    // Keep this for compatibility, but we will mostly rely on stats endpoint now.
+                    try {
+                        let tIn = projectStats.value.total_income || 0
+                        let tEx = projectStats.value.total_expense || 0
+
+                        projectSummary.value.total_income = tIn
+                        projectSummary.value.total_expense = tEx
+                    } catch (e) {
+                        console.error('Failed to process project summary', e)
                     }
                 }
 
@@ -1218,7 +1249,7 @@
                 return {
                     isLoggedIn, password, loading, submitting, loginError,
                     login, logout, formatMoney,
-                    activeTab, projects, selectedProjectId, incomes, expenses, incomesTotal, expensesTotal,
+                    activeTab, projects, selectedProjectId, incomes, expenses, incomesTotal, expensesTotal, projectSummary, incomesTotalAmount, expensesTotalAmount,
                     incomeForm, expenseForm, projectForm, incomeSearchQuery, expenseSearchQuery, filteredIncomes, filteredExpenses,
                     loadingMoreIncomes, loadingMoreExpenses, savingRecordId,
                     submitIncome, submitExpense, submitProject,

@@ -156,7 +156,7 @@
                     <div v-if="filteredIncomes.length > 0"
                         class="bg-brand-50 border-l-4 border-brand-500 rounded-r-xl p-3 flex justify-between items-center shadow-sm">
                         <span class="text-sm font-medium text-brand-800">总记入</span>
-                        <span class="font-bold text-brand-600">¥{{ formatMoney(projectSummary.total_income) }}</span>
+                        <span class="font-bold text-brand-600">¥{{ formatMoney(incomesTotalAmount) }}</span>
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -204,7 +204,7 @@
                     <div v-if="filteredExpenses.length > 0"
                         class="bg-blue-50 border-l-4 border-blue-500 rounded-r-xl p-3 flex justify-between items-center shadow-sm">
                         <span class="text-sm font-medium text-blue-800">总支出</span>
-                        <span class="font-bold text-blue-600">¥{{ formatMoney(projectSummary.total_expense) }}</span>
+                        <span class="font-bold text-blue-600">¥{{ formatMoney(expensesTotalAmount) }}</span>
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -295,9 +295,11 @@
                 const incomes = ref([])
                 const incomesPage = ref(1)
                 const incomesTotal = ref(0)
+                const incomesTotalAmount = ref(0)
                 const expenses = ref([])
                 const expensesPage = ref(1)
                 const expensesTotal = ref(0)
+                const expensesTotalAmount = ref(0)
                 const activeTab = ref('income')
                 const projectStats = ref({ incomes: [], expenses: [] })
                 const loading = ref(true)
@@ -389,22 +391,16 @@
                         expenses.value = expRes.data.data || []
 
                         incomesTotal.value = incRes.data.meta?.total || 0
+                        incomesTotalAmount.value = incRes.data.meta?.total_amount || 0
                         expensesTotal.value = expRes.data.meta?.total || 0
+                        expensesTotalAmount.value = expRes.data.meta?.total_amount || 0
 
-                        // Recalculate summary locally based on fetched list
-                        let tIn = incomes.value.reduce((acc, curr) => acc + Number(curr.amount), 0)
-                        let tEx = expenses.value.reduce((acc, curr) => acc + Number(curr.amount), 0)
-
+                        // The summary metrics will be populated by loadProjectStats using global counts.
+                        // We still set status here from the project record:
                         const curProj = projects.value.find(p => p.ID == currentProjectId.value)
+                        projectSummary.value.status = curProj ? curProj.status : 1
 
-                        projectSummary.value = {
-                            total_income: tIn,
-                            total_expense: tEx,
-                            balance: tIn - tEx,
-                            status: curProj ? curProj.status : 1
-                        }
-
-                        // Also fetch stats for the chart
+                        // Fetch stats which now contain the global sums
                         await loadProjectStats()
 
                     } catch (e) {
@@ -419,6 +415,12 @@
                     try {
                         const res = await axios.get(`/api/projects/${currentProjectId.value}/stats`)
                         projectStats.value = res.data
+
+                        // Update the projectSummary using the actual total figures from backend via stats
+                        projectSummary.value.total_income = res.data.total_income || 0
+                        projectSummary.value.total_expense = res.data.total_expense || 0
+                        projectSummary.value.balance = res.data.balance || 0
+
                         if (activeTab.value === 'stats') {
                             await initChart()
                         }
@@ -518,7 +520,7 @@
                     activeTab, incomes, expenses,
                     loading, formatMoney,
                     searchQuery, expenseSearchQuery, filteredIncomes, filteredExpenses,
-                    loadedIncomesTotal, loadedExpensesTotal,
+                    loadedIncomesTotal, loadedExpensesTotal, incomesTotalAmount, expensesTotalAmount,
                     loadingMoreIncomes, loadingMoreExpenses, loadMoreIncomes, loadMoreExpenses, incomesTotal, expensesTotal,
                     galleryOpen, currentImage, openGallery,
                     currentProjectName, loadProjectData // Kept existing returns
