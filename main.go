@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/gin-gonic/gin"
 
@@ -10,7 +11,11 @@ import (
 )
 
 func main() {
-	database.InitDB("village-bill.db")
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "village-bill.db"
+	}
+	database.InitDB(dbPath)
 
 	r := gin.Default()
 
