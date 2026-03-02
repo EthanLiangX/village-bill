@@ -171,7 +171,7 @@
                                 <div>
                                     <h3 class="font-bold text-gray-800">{{ item.villager_name }}</h3>
                                     <p class="text-xs text-gray-500"><i class="fa-regular fa-calendar mr-1"></i>{{
-                                        item.pay_date }} <span class="mx-1 text-gray-300">|</span> <span
+                                        formatDate(item.pay_date) }} <span class="mx-1 text-gray-300">|</span> <span
                                             class="bg-gray-100 px-1.5 py-0.5 rounded text-[10px]">{{ item.group_name
                                             }}</span></p>
                                 </div>
@@ -182,13 +182,12 @@
                         </div>
                     </div>
 
-                    <!-- Load More Incomes Button -->
-                    <div v-if="incomesTotal > incomes.length" class="mt-4 text-center pb-4">
-                        <button @click="loadMoreIncomes" type="button" :disabled="loadingMoreIncomes"
-                            class="text-xs bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 font-medium py-2 px-6 rounded-full shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 flex items-center justify-center mx-auto">
+                    <!-- Load More Incomes Trigger -->
+                    <div v-if="incomesTotal > incomes.length" class="mt-4 text-center pb-4" ref="incomesScrollTrigger">
+                        <div class="text-xs text-brand-600 font-medium py-2 flex items-center justify-center">
                             <i v-if="loadingMoreIncomes" class="fa-solid fa-spinner fa-spin mr-1"></i>
-                            {{ loadingMoreIncomes ? '正在加载...' : `加载更多 (已显示 ${incomes.length} / 共 ${incomesTotal} 条)` }}
-                        </button>
+                            {{ loadingMoreIncomes ? '加载中...' : '下拉加载更多' }}
+                        </div>
                     </div>
                 </div>
 
@@ -223,7 +222,7 @@
                             </div>
                             <div class="pl-2 flex justify-between items-end">
                                 <div class="text-xs text-gray-500 space-y-1">
-                                    <p><i class="fa-regular fa-calendar w-4"></i>{{ item.expense_date }}</p>
+                                    <p><i class="fa-regular fa-calendar w-4"></i>{{ formatDate(item.expense_date) }}</p>
                                     <p><i class="fa-regular fa-user w-4"></i>经手: {{ item.handler }}</p>
                                 </div>
                                 <button v-if="item.receipt_img" @click="openGallery(item.receipt_img)"
@@ -234,14 +233,13 @@
                         </div>
                     </div>
 
-                    <!-- Load More Expenses Button -->
-                    <div v-if="expensesTotal > expenses.length" class="mt-4 text-center pb-4">
-                        <button @click="loadMoreExpenses" type="button" :disabled="loadingMoreExpenses"
-                            class="text-xs bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 font-medium py-2 px-6 rounded-full shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 flex items-center justify-center mx-auto">
+                    <!-- Load More Expenses Trigger -->
+                    <div v-if="expensesTotal > expenses.length" class="mt-4 text-center pb-4"
+                        ref="expensesScrollTrigger">
+                        <div class="text-xs text-brand-600 font-medium py-2 flex items-center justify-center">
                             <i v-if="loadingMoreExpenses" class="fa-solid fa-spinner fa-spin mr-1"></i>
-                            {{ loadingMoreExpenses ? '正在加载...' : `加载更多 (已显示 ${expenses.length} / 共 ${expensesTotal} 条)`
-                            }}
-                        </button>
+                            {{ loadingMoreExpenses ? '加载中...' : '下拉加载更多' }}
+                        </div>
                     </div>
                 </div>
 
@@ -314,6 +312,22 @@
                 const formatMoney = (val) => {
                     return Number(val).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 }
+
+                // Format "2023-10-05T00:00:00Z" to "2023年10月05日"
+                const formatDate = (dateString) => {
+                    if (!dateString) return ''
+                    const dateObj = new Date(dateString)
+                    const year = dateObj.getFullYear()
+                    const month = dateObj.getMonth() + 1
+                    const day = dateObj.getDate()
+                    return `${year}年${month}月${day}日`
+                }
+
+                // Intersection Observer refs for infinite scrolling
+                const incomesScrollTrigger = ref(null)
+                const expensesScrollTrigger = ref(null)
+                let incomesObserver = null
+                let expensesObserver = null
 
                 const currentProjectName = computed(() => {
                     const p = projects.value.find(p => p.ID == currentProjectId.value)
@@ -403,6 +417,10 @@
                         // Fetch stats which now contain the global sums
                         await loadProjectStats()
 
+                        // Setup observers after initial data load
+                        setupIncomesObserver()
+                        setupExpensesObserver()
+
                     } catch (e) {
                         console.error('Failed to load data', e)
                     } finally {
@@ -470,13 +488,46 @@
                 watch(activeTab, async (newTab) => {
                     if (newTab === 'stats') {
                         await initChart()
-                    } else if (newTab === 'income' || newTab === 'expense') {
-                        // Refresh data when switching to list tabs
-                        if (currentProjectId.value) {
-                            await loadProjectData()
-                        }
+                    }
+                    if (newTab === 'income') {
+                        setupIncomesObserver()
+                    }
+                    if (newTab === 'expense') {
+                        setupExpensesObserver()
+                    }
+                    // Refresh data when switching to list tabs
+                    if (currentProjectId.value && (newTab === 'income' || newTab === 'expense')) {
+                        await loadProjectData()
                     }
                 })
+
+                const setupIncomesObserver = () => {
+                    setTimeout(() => {
+                        if (incomesObserver) incomesObserver.disconnect()
+                        if (!incomesScrollTrigger.value) return
+
+                        incomesObserver = new IntersectionObserver((entries) => {
+                            if (entries[0].isIntersecting && !loadingMoreIncomes.value && incomesTotal.value > incomes.value.length) {
+                                loadMoreIncomes()
+                            }
+                        }, { threshold: 0.1 })
+                        incomesObserver.observe(incomesScrollTrigger.value)
+                    }, 500)
+                }
+
+                const setupExpensesObserver = () => {
+                    setTimeout(() => {
+                        if (expensesObserver) expensesObserver.disconnect()
+                        if (!expensesScrollTrigger.value) return
+
+                        expensesObserver = new IntersectionObserver((entries) => {
+                            if (entries[0].isIntersecting && !loadingMoreExpenses.value && expensesTotal.value > expenses.value.length) {
+                                loadMoreExpenses()
+                            }
+                        }, { threshold: 0.1 })
+                        expensesObserver.observe(expensesScrollTrigger.value)
+                    }, 500)
+                }
 
                 const openGallery = (imgUrl) => {
                     currentImage.value = imgUrl
@@ -518,11 +569,11 @@
                 return {
                     projects, currentProjectId, projectSummary,
                     activeTab, incomes, expenses,
-                    loading, formatMoney,
+                    loading, formatMoney, formatDate,
                     searchQuery, expenseSearchQuery, filteredIncomes, filteredExpenses,
                     loadedIncomesTotal, loadedExpensesTotal, incomesTotalAmount, expensesTotalAmount,
                     loadingMoreIncomes, loadingMoreExpenses, loadMoreIncomes, loadMoreExpenses, incomesTotal, expensesTotal,
-                    galleryOpen, currentImage, openGallery,
+                    galleryOpen, currentImage, openGallery, incomesScrollTrigger, expensesScrollTrigger,
                     currentProjectName, loadProjectData // Kept existing returns
                 }
             }

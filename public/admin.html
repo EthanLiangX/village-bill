@@ -195,7 +195,7 @@
                                             <span class="font-bold text-gray-800">{{ inc.villager_name }} <span
                                                     class="text-xs font-normal text-gray-500">({{ inc.group_name
                                                     }})</span></span>
-                                            <span class="text-xs text-gray-500">{{ inc.pay_date }}</span>
+                                            <span class="text-xs text-gray-500">{{ formatDate(inc.pay_date) }}</span>
                                         </div>
                                         <div class="flex flex-col items-end gap-1">
                                             <span class="text-brand-600 font-bold">+{{ formatMoney(inc.amount) }}</span>
@@ -352,7 +352,7 @@
                                         <div class="flex flex-col flex-1 pr-2">
                                             <span class="font-bold text-gray-800">{{ exp.title }}</span>
                                             <span class="text-xs text-gray-500">经手: {{ exp.handler }} | {{
-                                                exp.expense_date }}</span>
+                                                formatDate(exp.expense_date) }}</span>
                                         </div>
                                         <div class="flex flex-col items-end gap-1">
                                             <span class="text-brand-600 font-bold">-{{ formatMoney(exp.amount) }}</span>
@@ -725,6 +725,16 @@
 
                 const formatMoney = (val) => {
                     return Number(val).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                }
+
+                // Format "2023-10-05T00:00:00Z" to "2023年10月05日"
+                const formatDate = (dateString) => {
+                    if (!dateString) return ''
+                    const dateObj = new Date(dateString)
+                    const year = dateObj.getFullYear()
+                    const month = dateObj.getMonth() + 1
+                    const day = dateObj.getDate()
+                    return `${year}年${month}月${day}日`
                 }
 
                 const filteredIncomes = computed(() => {
@@ -1175,12 +1185,13 @@
                         editRecordForm.villager_name = record.villager_name
                         editRecordForm.group_name = record.group_name
                         editRecordForm.amount = record.amount
-                        editRecordForm.pay_date = record.pay_date ? record.pay_date.split('T')[0] : ''
+                        // Parse "YYYY-MM-DDTHH:mm..." OR "YYYY-MM-DD"
+                        editRecordForm.pay_date = record.pay_date ? record.pay_date.substring(0, 10) : ''
                     } else {
                         editRecordForm.title = record.title
                         editRecordForm.handler = record.handler
                         editRecordForm.amount = record.amount
-                        editRecordForm.expense_date = record.expense_date ? record.expense_date.split('T')[0] : ''
+                        editRecordForm.expense_date = record.expense_date ? record.expense_date.substring(0, 10) : ''
                     }
                 }
 
@@ -1248,9 +1259,10 @@
 
                 return {
                     isLoggedIn, password, loading, submitting, loginError,
-                    login, logout, formatMoney,
+                    login, logout, formatMoney, formatDate,
                     activeTab, projects, selectedProjectId, incomes, expenses, incomesTotal, expensesTotal, projectSummary, incomesTotalAmount, expensesTotalAmount,
                     incomeForm, expenseForm, projectForm, incomeSearchQuery, expenseSearchQuery, filteredIncomes, filteredExpenses,
+                    loadedIncomesTotal, loadedExpensesTotal,
                     loadingMoreIncomes, loadingMoreExpenses, savingRecordId,
                     submitIncome, submitExpense, submitProject,
                     editingProjectId, editProjectForm, startEditProject, cancelEditProject, saveEditProject,

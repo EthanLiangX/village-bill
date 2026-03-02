@@ -41,6 +41,44 @@ func logAudit(c *gin.Context, action string, entityType string, entityID uint, d
 	})
 }
 
+// parseExcelDate attempts to parse various date strings from Excel into YYYY-MM-DD
+func parseExcelDate(dateStr string) string {
+	dateStr = strings.TrimSpace(dateStr)
+	if dateStr == "" {
+		return time.Now().Format("2006-01-02")
+	}
+
+	layouts := []string{
+		"2006-01-02",
+		"2006-1-2",
+		"2006/01/02",
+		"2006/1/2",
+		"2006.01.02",
+		"2006.1.2",
+		"01-02-06", // MM-DD-YY
+		"01/02/06", // MM/DD/YY
+		"06-01-02", // YY-MM-DD
+		"06/01/02", // YY/MM/DD
+	}
+
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, dateStr); err == nil {
+			return t.Format("2006-01-02")
+		}
+	}
+
+	// Sometimes Excel saves dates as integers representing days since 1900-01-01
+	if num, err := strconv.ParseFloat(dateStr, 64); err == nil {
+		// Excel leap year bug included: 1900 is treated as a leap year
+		// Usually excel epoch is 1899-12-30
+		t := time.Date(1899, time.December, 30, 0, 0, 0, 0, time.UTC)
+		t = t.Add(time.Duration(num * float64(time.Hour) * 24))
+		return t.Format("2006-01-02")
+	}
+
+	return dateStr // Fallback to raw string if all parsing fails
+}
+
 func Login(c *gin.Context) {
 	var body struct {
 		Password string `json:"password"`
@@ -536,7 +574,7 @@ func ImportIncomes(c *gin.Context) {
 			VillagerName: row[0],
 			GroupName:    row[1],
 			Amount:       amount,
-			PayDate:      row[3],
+			PayDate:      parseExcelDate(row[3]),
 		})
 	}
 
@@ -598,7 +636,7 @@ func ImportExpenses(c *gin.Context) {
 			Title:       row[0],
 			Amount:      amount,
 			Handler:     row[2],
-			ExpenseDate: row[3],
+			ExpenseDate: parseExcelDate(row[3]),
 		})
 	}
 
