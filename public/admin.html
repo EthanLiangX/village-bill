@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>后台管理 - 数字红榜</title>
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#fef2f2',
+                            100: '#fee2e2',
+                            500: '#ef4444',
+                            600: '#dc2626',
+                            700: '#b91c1c',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Axios -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        [v-cloak] {
+            display: none;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 text-gray-800 font-sans antialiased">
+    <div id="app" v-cloak class="max-w-md mx-auto min-h-screen bg-white shadow-xl relative pb-10">
+
+        <!-- Login Screen -->
+        <div v-if="!isLoggedIn" class="p-6 flex flex-col justify-center min-h-screen">
+            <div class="text-center mb-10">
+                <div
+                    class="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4 text-brand-600 text-3xl">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-800">管理后台登录</h1>
+                <p class="text-gray-500 text-sm mt-2">村集体财务公开系统</p>
+            </div>
+
+            <form @submit.prevent="login" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">管理密码</label>
+                    <input type="password" v-model="password"
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
+                        placeholder="请输入密码" required>
+                </div>
+                <button type="submit"
+                    class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex justify-center items-center"
+                    :disabled="loading">
+                    <i v-if="loading" class="fa-solid fa-spinner fa-spin mr-2"></i>
+                    登录
+                </button>
+                <p v-if="loginError" class="text-brand-600 text-sm text-center mt-2">{{ loginError }}</p>
+            </form>
+        </div>
+
+        <!-- Admin Interface -->
+        <div v-else>
+            <!-- Header -->
+            <div
+                class="bg-brand-600 text-white px-4 py-4 shadow-md flex justify-between items-center sticky top-0 z-40">
+                <h1 class="font-bold text-lg flex items-center"><i class="fa-solid fa-gear mr-2"></i>数据录入台</h1>
+                <div class="flex items-center gap-4">
+                    <button @click="showPasswordModal = true"
+                        class="text-brand-50 hover:text-white text-sm flex items-center transition-colors">
+                        <i class="fa-solid fa-key mr-1"></i>修改密码
+                    </button>
+                    <button @click="logout"
+                        class="text-brand-100 hover:text-white text-sm flex items-center transition-colors">
+                        <i class="fa-solid fa-right-from-bracket mr-1"></i>退出登录
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div class="flex border-b border-gray-200">
+                <button @click="activeTab = 'income'"
+                    :class="['flex-1 py-3 text-sm font-medium transition-colors border-b-2', activeTab === 'income' ? 'border-brand-500 text-brand-600 bg-brand-50' : 'border-transparent text-gray-500 hover:bg-gray-50']">记收入</button>
+                <button @click="activeTab = 'expense'"
+                    :class="['flex-1 py-3 text-sm font-medium transition-colors border-b-2', activeTab === 'expense' ? 'border-brand-500 text-brand-600 bg-brand-50' : 'border-transparent text-gray-500 hover:bg-gray-50']">记支出</button>
+                <button @click="activeTab = 'project'"
+                    :class="['flex-1 py-3 text-sm font-medium transition-colors border-b-2', activeTab === 'project' ? 'border-brand-500 text-brand-600 bg-brand-50' : 'border-transparent text-gray-500 hover:bg-gray-50']">建项目</button>
+                <button @click="activeTab = 'stats'"
+                    :class="['flex-1 py-3 text-sm font-medium transition-colors border-b-2', activeTab === 'stats' ? 'border-brand-500 text-brand-600 bg-brand-50' : 'border-transparent text-gray-500 hover:bg-gray-50']">数据看板</button>
+                <button @click="activeTab = 'audit'"
+                    :class="['flex-1 py-3 text-sm font-medium transition-colors border-b-2', activeTab === 'audit' ? 'border-brand-500 text-brand-600 bg-brand-50' : 'border-transparent text-gray-500 hover:bg-gray-50']">审计日志</button>
+            </div>
+
+            <div class="p-5">
+                <!-- Notifications -->
+                <div v-if="notification.show"
+                    :class="['mb-4 p-3 rounded-lg text-sm flex items-start', notification.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800']">
+                    <i
+                        :class="['fa-solid mt-0.5 mr-2', notification.type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation']"></i>
+                    <span>{{ notification.message }}</span>
+                </div>
+
+                <!-- Global Project Selector (for Income & Expense) -->
+                <div v-show="activeTab !== 'project'" class="mb-5 bg-gray-50 p-4 rounded-xl border border-gray-200">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">选择目标项目 <span
+                            class="text-brand-600">*</span></label>
+                    <select v-model="selectedProjectId"
+                        class="w-full px-3 py-2 mb-3 border border-gray-300 rounded-lg text-sm focus:ring-brand-500 focus:border-brand-500 bg-white">
+                        <option :value="0" disabled>-- 请选择集资项目 --</option>
+                        <option v-for="p in projects" :key="p.ID" :value="p.ID">{{ p.name }}</option>
+                    </select>
+
+                    <button v-if="selectedProjectId !== 0" @click="exportData"
+                        class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex justify-center items-center text-sm shadow-sm">
+                        <i class="fa-solid fa-file-excel mr-2"></i> 导出该项目财务台账 (Excel)
+                    </button>
+                </div>
+
+                <!-- Income Form -->
+                <form v-if="activeTab === 'income'" @submit.prevent="submitIncome" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">交款人姓名</label>
+                        <input type="text" v-model="incomeForm.villager_name"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-brand-500 focus:border-brand-500"
+                            required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">所属组别 (或村落)</label>
+                        <input type="text" v-model="incomeForm.group_name"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-brand-500 focus:border-brand-500"
+                            placeholder="如: 一组 / 张家界" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">交款金额 (元)</label>
+                        <input type="number" step="0.01" min="0" v-model="incomeForm.amount"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-brand-600 font-bold focus:ring-brand-500 focus:border-brand-500"
+                            required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">交款日期</label>
+                        <input type="date" v-model="incomeForm.pay_date"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-brand-500 focus:border-brand-500"
+                            required>
+                    </div>
+                    <button type="submit"
+                        class="w-full mt-2 bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 px-4 rounded-xl transition-colors"
+                        :disabled="submitting">
+                        <i v-if="submitting" class="fa-solid fa-spinner fa-spin mr-2"></i>保存收入记录
+                    </button>
+
+                    <!-- Batch Import -->
+                    <div class="grid grid-cols-2 gap-2 mt-4">
+                        <a :href="`/api/admin/incomes/template?token=${token}`" target="_blank"
+                            class="flex justify-center items-center bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg text-xs font-medium transition-colors">
+                            <i class="fa-solid fa-download mr-1"></i>下载格式模板
+                        </a>
+                        <button type="button" @click="triggerExcelImport('income')" :disabled="importingExcel"
+                            class="flex justify-center items-center bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 py-2 rounded-lg text-xs font-medium transition-colors">
+                            <i v-if="importingExcel && importType === 'income'"
+                                class="fa-solid fa-spinner fa-spin mr-1"></i>
+                            <i v-else class="fa-solid fa-file-excel mr-1"></i>批量导入 Excel
+                        </button>
+                    </div>
+
+                    <!-- Income List for Editing -->
+                    <div class="mt-8 pt-6 border-t border-gray-200">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-sm font-bold text-gray-700">最近收入记录</h3>
+                            <button type="button" @click="loadIncomesAndExpenses"
+                                class="text-xs text-brand-600 hover:text-brand-800"><i
+                                    class="fa-solid fa-rotate mr-1"></i>刷新</button>
+                        </div>
+                        <div class="relative mb-3">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                            <input v-model="incomeSearchQuery" type="text" placeholder="搜索姓名或组别..."
+                                class="w-full bg-white border border-gray-200 rounded-lg py-2 pl-8 pr-3 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500">
+                        </div>
+                        <ul class="space-y-3">
+                            <li v-for="inc in filteredIncomes" :key="inc.ID"
+                                class="text-sm p-3 bg-gray-50 border rounded-lg flex flex-col gap-2 relative overflow-hidden">
+                                <template v-if="editingRecordType !== 'income' || editingRecordId !== inc.ID">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex flex-col">
+                                            <span class="font-bold text-gray-800">{{ inc.villager_name }} <span
+                                                    class="text-xs font-normal text-gray-500">({{ inc.group_name
+                                                    }})</span></span>
+                                            <span class="text-xs text-gray-500">{{ inc.pay_date }}</span>
+                                        </div>
+                                        <div class="flex flex-col items-end gap-1">
+                                            <span class="text-brand-600 font-bold">+{{ formatMoney(inc.amount) }}</span>
+                                            <div class="flex">
+                                                <button @click.prevent="startEditRecord('income', inc)"
+                                                    class="text-gray-400 hover:text-brand-600 transition-colors p-1"
+                                                    title="编辑记录">
+                                                    <i class="fa-solid fa-pen-to-square"></i>
+                                                </button>
+                                                <button @click.prevent="deleteRecord('income', inc.ID)"
+                                                    class="text-gray-400 hover:text-red-600 transition-colors p-1 ml-1"
+                                                    title="删除记录">
+                                                    <i class="fa-solid fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                                <template v-else>
+                                    <div
+                                        class="grid grid-cols-2 gap-y-3 gap-x-2 mb-2 p-2 bg-white rounded shadow-sm border border-brand-100">
+                                        <div class="flex flex-col">
+                                            <label class="text-[10px] text-gray-500 mb-0.5">姓名</label>
+                                            <input type="text" v-model="editRecordForm.villager_name"
+                                                class="w-full px-2 py-1.5 text-sm border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500">
+                                        </div>
+                                        <div class="flex flex-col">
+                                            <label class="text-[10px] text-gray-500 mb-0.5">组别/村落</label>
+                                            <input type="text" v-model="editRecordForm.group_name"
+                                                class="w-full px-2 py-1.5 text-sm border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500">
+                                        </div>
+                                        <div class="flex flex-col">
+                                            <label class="text-[10px] text-gray-500 mb-0.5">金额(元)</label>
+                                            <input type="number" step="0.01" v-model="editRecordForm.amount"
+                                                class="w-full px-2 py-1.5 text-sm font-bold text-brand-600 border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500">
+                                        </div>
+                                        <div class="flex flex-col">
+                                            <label class="text-[10px] text-gray-500 mb-0.5">交款日期</label>
+                                            <input type="date" v-model="editRecordForm.pay_date"
+                                                class="w-full px-2 py-1.5 text-sm border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500">
+                                        </div>
+                                    </div>
+                                    <div class="flex justify-end gap-2 pt-2 border-t border-gray-200">
+                                        <button @click.prevent="cancelEditRecord"
+                                            class="text-xs px-3 py-1 text-gray-600 border border-gray-300 rounded hover:bg-gray-100 transition-colors">取消</button>
+                                        <button @click.prevent="saveEditIncome(inc.ID)"
+                                            :disabled="savingRecordId === inc.ID"
+                                            class="text-xs px-3 py-1 text-white bg-green-500 rounded hover:bg-green-600 transition-colors flex items-center">
+                                            <i v-if="savingRecordId === inc.ID"
+                                                class="fa-solid fa-spinner fa-spin mr-1"></i>保存
+                                        </button>
+                                    </div>
+                                </template>
+                            </li>
+                            <li v-if="incomes.length === 0" class="text-center text-gray-400 text-xs py-4">暂无记录</li>
+                        </ul>
+                        <div v-if="incomesTotal > incomes.length" class="mt-4 text-center">
+                            <button @click="loadMoreIncomes" type="button" :disabled="loadingMoreIncomes"
+                                class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 font-medium py-1.5 px-4 rounded-full transition-colors flex items-center justify-center mx-auto">
+                                <i v-if="loadingMoreIncomes" class="fa-solid fa-spinner fa-spin mr-1"></i>
+                                {{ loadingMoreIncomes ? '正在加载...' : `加载更多 (已显示 ${incomes.length} / 共 ${incomesTotal} 条)`
+                                }}
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Expense Form -->
+                <form v-if="activeTab === 'expense'" @submit.prevent="submitExpense" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">支出摘要 (用途)</label>
+                        <input type="text" v-model="expenseForm.title"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-brand-500 focus:border-brand-500"
+                            placeholder="如: 购买沙土碎石10车" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">支出金额 (元)</label>
+                        <input type="number" step="0.01" min="0" v-model="expenseForm.amount"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-brand-600 font-bold focus:ring-brand-500 focus:border-brand-500"
+                            required>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">经手人</label>
+                            <input type="text" v-model="expenseForm.handler"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-brand-500 focus:border-brand-500"
+                                required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">发生日期</label>
+                            <input type="date" v-model="expenseForm.expense_date"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-brand-500 focus:border-brand-500"
+                                required>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">凭证图 (必须拍照或上传照片)</label>
+                        <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-xl relative overflow-hidden bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
+                            @click="$refs.fileInput.click()">
+                            <div class="space-y-1 text-center relative z-10" v-if="!expenseForm.previewImg">
+                                <i class="fa-solid fa-camera text-3xl text-gray-400 mb-2"></i>
+                                <div class="text-sm text-gray-600">点击上传凭证照片</div>
+                            </div>
+                            <img v-else :src="expenseForm.previewImg"
+                                class="absolute inset-0 w-full h-full object-cover opacity-80" />
+                            <div v-if="expenseForm.previewImg"
+                                class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity z-20">
+                                <span class="text-white text-sm font-bold"><i
+                                        class="fa-solid fa-pen mr-1"></i>更换图片</span>
+                            </div>
+                        </div>
+                        <input type="file" ref="fileInput" class="hidden" accept="image/*" @change="handleFileUpload"
+                            required>
+                    </div>
+                    <button type="submit"
+                        class="w-full mt-2 bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 px-4 rounded-xl transition-colors"
+                        :disabled="submitting">
+                        <i v-if="submitting" class="fa-solid fa-spinner fa-spin mr-2"></i>保存支出明细
+                    </button>
+
+                    <!-- Batch Import -->
+                    <div class="grid grid-cols-2 gap-2 mt-4">
+                        <a :href="`/api/admin/expenses/template?token=${token}`" target="_blank"
+                            class="flex justify-center items-center bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg text-xs font-medium transition-colors">
+                            <i class="fa-solid fa-download mr-1"></i>下载格式模板
+                        </a>
+                        <button type="button" @click="triggerExcelImport('expense')" :disabled="importingExcel"
+                            class="flex justify-center items-center bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 py-2 rounded-lg text-xs font-medium transition-colors">
+                            <i v-if="importingExcel && importType === 'expense'"
+                                class="fa-solid fa-spinner fa-spin mr-1"></i>
+                            <i v-else class="fa-solid fa-file-excel mr-1"></i>批量导入 Excel
+                        </button>
+                    </div>
+
+                    <!-- Expense List for Editing -->
+                    <div class="mt-8 pt-6 border-t border-gray-200">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-sm font-bold text-gray-700">最近支出记录</h3>
+                            <button type="button" @click="loadIncomesAndExpenses"
+                                class="text-xs text-brand-600 hover:text-brand-800"><i
+                                    class="fa-solid fa-rotate mr-1"></i>刷新</button>
+                        </div>
+                        <div class="relative mb-3">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                            <input v-model="expenseSearchQuery" type="text" placeholder="搜索支出摘要或经手人..."
+                                class="w-full bg-white border border-gray-200 rounded-lg py-2 pl-8 pr-3 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500">
+                        </div>
+                        <ul class="space-y-3">
+                            <li v-for="exp in filteredExpenses" :key="exp.ID"
+                                class="text-sm p-3 bg-gray-50 border rounded-lg flex flex-col gap-2 relative overflow-hidden">
+                                <template v-if="editingRecordType !== 'expense' || editingRecordId !== exp.ID">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex flex-col flex-1 pr-2">
+                                            <span class="font-bold text-gray-800">{{ exp.title }}</span>
+                                            <span class="text-xs text-gray-500">经手: {{ exp.handler }} | {{
+                                                exp.expense_date }}</span>
+                                        </div>
+                                        <div class="flex flex-col items-end gap-1">
+                                            <span class="text-brand-600 font-bold">-{{ formatMoney(exp.amount) }}</span>
+                                            <div class="flex">
+                                                <button @click.prevent="startEditRecord('expense', exp)"
+                                                    class="text-gray-400 hover:text-brand-600 transition-colors p-1"
+                                                    title="编辑记录">
+                                                    <i class="fa-solid fa-pen-to-square"></i>
+                                                </button>
+                                                <button @click.prevent="deleteRecord('expense', exp.ID)"
+                                                    class="text-gray-400 hover:text-red-600 transition-colors p-1 ml-1"
+                                                    title="删除记录">
+                                                    <i class="fa-solid fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                                <template v-else>
+                                    <div
+                                        class="flex flex-col gap-y-3 mb-2 p-2 bg-white rounded shadow-sm border border-brand-100">
+                                        <div class="flex flex-col">
+                                            <label class="text-[10px] text-gray-500 mb-0.5">支出摘要</label>
+                                            <input type="text" v-model="editRecordForm.title"
+                                                class="w-full px-2 py-1.5 text-sm border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500">
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-x-2 gap-y-3">
+                                            <div class="flex flex-col">
+                                                <label class="text-[10px] text-gray-500 mb-0.5">金额(元)</label>
+                                                <input type="number" step="0.01" v-model="editRecordForm.amount"
+                                                    class="w-full px-2 py-1.5 text-sm font-bold text-brand-600 border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500">
+                                            </div>
+                                            <div class="flex flex-col">
+                                                <label class="text-[10px] text-gray-500 mb-0.5">经手人</label>
+                                                <input type="text" v-model="editRecordForm.handler"
+                                                    class="w-full px-2 py-1.5 text-sm border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500">
+                                            </div>
+                                            <div class="flex flex-col col-span-2">
+                                                <label class="text-[10px] text-gray-500 mb-0.5">发生日期</label>
+                                                <input type="date" v-model="editRecordForm.expense_date"
+                                                    class="w-full px-2 py-1.5 text-sm border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="flex justify-end gap-2 pt-2 border-t border-gray-200">
+                                        <button @click.prevent="cancelEditRecord"
+                                            class="text-xs px-3 py-1 text-gray-600 border border-gray-300 rounded hover:bg-gray-100 transition-colors">取消</button>
+                                        <button @click.prevent="saveEditExpense(exp.ID)"
+                                            :disabled="savingRecordId === exp.ID"
+                                            class="text-xs px-3 py-1 text-white bg-green-500 rounded hover:bg-green-600 transition-colors flex items-center">
+                                            <i v-if="savingRecordId === exp.ID"
+                                                class="fa-solid fa-spinner fa-spin mr-1"></i>保存
+                                        </button>
+                                    </div>
+                                </template>
+                            </li>
+                            <li v-if="expenses.length === 0" class="text-center text-gray-400 text-xs py-4">暂无记录</li>
+                        </ul>
+                        <div v-if="expensesTotal > expenses.length" class="mt-4 text-center">
+                            <button @click="loadMoreExpenses" type="button" :disabled="loadingMoreExpenses"
+                                class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 font-medium py-1.5 px-4 rounded-full transition-colors flex items-center justify-center mx-auto">
+                                <i v-if="loadingMoreExpenses" class="fa-solid fa-spinner fa-spin mr-1"></i>
+                                {{ loadingMoreExpenses ? '正在加载...' : `加载更多 (已显示 ${expenses.length} / 共 ${expensesTotal}
+                                条)` }}
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Project Form -->
+                <form v-if="activeTab === 'project'" @submit.prevent="submitProject" class="space-y-4">
+                    <div class="bg-blue-50 text-blue-800 p-4 rounded-xl text-sm mb-4 border border-blue-100">
+                        <i class="fa-solid fa-circle-info mr-2"></i>新建项目会默认成为群众扫码进来看到的第一个项目。
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">新项目名称</label>
+                        <input type="text" v-model="projectForm.name"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-brand-500 focus:border-brand-500"
+                            placeholder="如: 2026年村主路硬化工程" required>
+                    </div>
+                    <button type="submit"
+                        class="w-full mt-4 bg-gray-800 hover:bg-black text-white font-bold py-3 px-4 rounded-xl transition-colors"
+                        :disabled="submitting">
+                        <i v-if="submitting" class="fa-solid fa-spinner fa-spin mr-2"></i>创建新项目
+                    </button>
+
+                    <div class="mt-8">
+                        <h3 class="text-sm font-bold text-gray-700 mb-3 border-b pb-2">已有项目列表</h3>
+                        <ul class="space-y-2">
+                            <li v-for="p in projects" :key="p.ID"
+                                class="text-sm p-3 bg-gray-50 border rounded-lg flex flex-col gap-2">
+                                <div class="flex justify-between items-center w-full">
+                                    <div class="flex-1 flex items-center pr-4">
+                                        <span v-if="editingProjectId !== p.ID" class="truncate font-medium">{{ p.name
+                                            }}</span>
+                                        <input v-else type="text" v-model="editProjectForm.name"
+                                            class="w-full px-2 py-1 text-sm border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                            @keyup.enter="saveEditProject(p.ID)" @keyup.esc="cancelEditProject">
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span v-if="p.status === 1"
+                                            class="text-green-600 text-[10px] px-2 py-1 bg-green-100 rounded whitespace-nowrap">进行中</span>
+                                        <span v-if="p.status === 2"
+                                            class="text-yellow-600 text-[10px] px-2 py-1 bg-yellow-100 rounded whitespace-nowrap">已结项</span>
+                                        <div class="flex gap-1 ml-1" v-if="editingProjectId !== p.ID">
+                                            <button @click.prevent="startEditProject(p)"
+                                                class="text-gray-400 hover:text-brand-600 transition-colors p-1"
+                                                title="编辑名称">
+                                                <i class="fa-solid fa-pen-to-square"></i>
+                                            </button>
+                                        </div>
+                                        <div class="flex gap-1 ml-1" v-else>
+                                            <button @click.prevent="saveEditProject(p.ID)"
+                                                class="text-green-500 hover:text-green-700 transition-colors p-1"
+                                                title="保存">
+                                                <i class="fa-solid fa-check"></i>
+                                            </button>
+                                            <button @click.prevent="cancelEditProject"
+                                                class="text-gray-400 hover:text-red-500 transition-colors p-1"
+                                                title="取消">
+                                                <i class="fa-solid fa-xmark"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex gap-2 mt-1 pt-2 border-t border-gray-200"
+                                    v-if="editingProjectId === p.ID">
+                                    <label class="flex items-center text-xs text-gray-600 cursor-pointer">
+                                        <input type="radio" v-model="editProjectForm.status" :value="1"
+                                            class="mr-1 text-brand-600 focus:ring-brand-500">
+                                        进行中
+                                    </label>
+                                    <label class="flex items-center text-xs text-gray-600 cursor-pointer">
+                                        <input type="radio" v-model="editProjectForm.status" :value="2"
+                                            class="mr-1 text-brand-600 focus:ring-brand-500">
+                                        已结项
+                                    </label>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </form>
+
+                <!-- Stats View -->
+                <div v-show="activeTab === 'stats'" class="space-y-4 pt-2">
+                    <div class="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+                        <h3 class="font-bold text-gray-800 mb-4 border-l-4 border-brand-500 pl-2">月度收支趋势</h3>
+                        <div id="monthlyChartAdmin" class="w-full h-64"></div>
+                    </div>
+                </div>
+
+                <!-- Audit Logs View -->
+                <div v-show="activeTab === 'audit'" class="space-y-4 pt-2">
+
+                    <!-- DB Backup Feature -->
+                    <div
+                        class="bg-gradient-to-r from-brand-50 to-white border border-brand-100 rounded-xl p-5 shadow-sm flex justify-between items-center mb-6">
+                        <div>
+                            <h3 class="font-bold text-brand-800 text-lg flex items-center mb-1">
+                                <i class="fa-solid fa-cloud-arrow-down mr-2 text-brand-600"></i> 一键数据备份
+                                (由于本系统无云同步请务必定期备份)
+                            </h3>
+                            <p class="text-xs text-brand-600/80">下载当前系统的完整数据库文件 (SQLite .db)，请下载后妥善保管在个人电脑中，作为灾备恢复使用。
+                            </p>
+                        </div>
+                        <a :href="`/api/admin/backup?token=${token}`" target="_blank"
+                            class="bg-brand-600 hover:bg-brand-700 text-white font-bold py-2.5 px-5 rounded-lg transition-all shadow hover:shadow-md flex items-center focus:outline-none">
+                            <i class="fa-solid fa-download mr-2"></i> 下载数据库文件
+                        </a>
+                    </div>
+
+                    <div class="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+                        <div class="flex justify-between items-center mb-4 border-l-4 border-brand-500 pl-2">
+                            <h3 class="font-bold text-gray-800">系统操作审计日志</h3>
+                            <button @click="loadAuditLogs(true)" type="button"
+                                class="text-xs text-brand-600 flex items-center hover:underline focus:outline-none">
+                                <i class="fa-solid fa-rotate-right mr-1"></i>刷新日志
+                            </button>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm text-left">
+                                <thead class="text-xs text-gray-500 bg-gray-50 uppercase rounded-t-lg">
+                                    <tr>
+                                        <th class="px-3 py-2">时间</th>
+                                        <th class="px-3 py-2">管理员</th>
+                                        <th class="px-3 py-2">动作</th>
+                                        <th class="px-3 py-2">对象</th>
+                                        <th class="px-3 py-2 max-w-[200px]">详情</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="log in auditLogs" :key="log.ID"
+                                        class="border-b transition hover:bg-gray-50/50">
+                                        <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-500">{{ new
+                                            Date(log.CreatedAt).toLocaleString() }}</td>
+                                        <td class="px-3 py-2 font-medium">{{ log.admin_username }}</td>
+                                        <td class="px-3 py-2">
+                                            <span :class="['px-2 py-0.5 rounded text-[10px] font-bold', 
+                                                log.action === 'CREATE' ? 'bg-green-100 text-green-700' : 
+                                                log.action === 'UPDATE' ? 'bg-blue-100 text-blue-700' : 
+                                                'bg-red-100 text-red-700']">
+                                                {{ log.action }}
+                                            </span>
+                                        </td>
+                                        <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ log.entity_type }} #{{
+                                            log.entity_id }}</td>
+                                        <td class="px-3 py-2 max-w-[200px] truncate text-xs text-gray-400"
+                                            :title="log.details">{{ log.details }}</td>
+                                    </tr>
+                                    <tr v-if="auditLogs.length === 0">
+                                        <td colspan="5" class="px-3 py-8 text-center text-gray-400">暂无任何操作记录</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div v-if="auditLogsTotal > auditLogs.length" class="mt-4 text-center">
+                            <button @click="loadMoreAuditLogs" :disabled="loadingMoreAuditLogs" type="button"
+                                class="text-xs bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 py-1.5 px-4 rounded-full shadow-sm transition-all focus:outline-none">
+                                <i v-if="loadingMoreAuditLogs" class="fa-solid fa-spinner fa-spin mr-1"></i>
+                                {{ loadingMoreAuditLogs ? '正在加载...' : `加载更多 (${auditLogs.length} / ${auditLogsTotal})`
+                                }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Hidden input for Excel Upload -->
+        <input type="file" ref="excelFileInput" class="hidden" accept=".xlsx" @change="handleExcelUpload">
+
+        <!-- Password Change Modal -->
+        <div v-if="showPasswordModal"
+            class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all">
+                <div
+                    class="bg-gradient-to-r from-gray-700 to-gray-900 px-6 py-4 flex justify-between items-center text-white">
+                    <h3 class="font-bold text-lg flex items-center"><i
+                            class="fa-solid fa-shield-halved mr-2"></i>修改管理员密码</h3>
+                    <button @click="showPasswordModal = false"
+                        class="text-white/70 hover:text-white focus:outline-none">
+                        <i class="fa-solid fa-xmark text-xl"></i>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <form @submit.prevent="changePassword" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">原密码</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-lock absolute left-3 top-3 text-gray-400"></i>
+                                <input type="password" v-model="passwordForm.oldPassword" required
+                                    class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all outline-none"
+                                    placeholder="请输入当前使用的密码">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">新密码</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-key absolute left-3 top-3 text-gray-400"></i>
+                                <input type="password" v-model="passwordForm.newPassword" required minlength="6"
+                                    class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all outline-none"
+                                    placeholder="至少 6 位字符">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">确认新密码</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-check-double absolute left-3 top-3 text-gray-400"></i>
+                                <input type="password" v-model="passwordForm.confirmPassword" required minlength="6"
+                                    class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all outline-none"
+                                    placeholder="请再次输入新密码">
+                            </div>
+                        </div>
+                        <div class="pt-2 flex gap-3">
+                            <button type="button" @click="showPasswordModal = false"
+                                class="w-1/3 py-2.5 px-4 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors focus:outline-none">
+                                取消
+                            </button>
+                            <button type="submit" :disabled="submittingPassword"
+                                class="w-2/3 py-2.5 px-4 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 transition-all shadow hover:shadow-lg flex justify-center items-center">
+                                <i v-if="submittingPassword" class="fa-solid fa-spinner fa-spin mr-2"></i> 确认修改
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, reactive, watch } = Vue
+
+        // Axios Interceptor for auth token
+        axios.interceptors.request.use(config => {
+            const token = localStorage.getItem('village_token')
+            if (token) {
+                config.headers.Authorization = `Bearer ${token}`
+            }
+            return config
+        })
+
+        axios.interceptors.response.use(response => response, error => {
+            if (error.response && error.response.status === 401) {
+                localStorage.removeItem('village_token')
+                window.location.reload()
+            }
+            return Promise.reject(error)
+        })
+
+        createApp({
+            setup() {
+                const token = ref(localStorage.getItem('village_token') || '')
+                const isLoggedIn = ref(false)
+                const password = ref('')
+                const loading = ref(false)
+                const submitting = ref(false)
+                const loginError = ref('')
+
+                const activeTab = ref('income')
+                const projects = ref([])
+
+                const incomes = ref([])
+                const incomesPage = ref(1)
+                const incomesTotal = ref(0)
+                const incomeSearchQuery = ref('')
+                const loadingMoreIncomes = ref(false)
+
+                const expenses = ref([])
+                const expensesPage = ref(1)
+                const expensesTotal = ref(0)
+                const expenseSearchQuery = ref('')
+                const suspenseSearchQuery = ref('')
+                const loadingMoreExpenses = ref(false)
+
+                const auditLogs = ref([])
+                const auditLogsPage = ref(1)
+                const auditLogsTotal = ref(0)
+                const loadingMoreAuditLogs = ref(false)
+
+                const savingRecordId = ref(null)
+                const projectStats = ref({ incomes: [], expenses: [] })
+
+                const selectedProjectId = ref(0)
+                const excelFileInput = ref(null)
+                const importType = ref('')
+                const importingExcel = ref(false)
+
+                const showPasswordModal = ref(false)
+                const submittingPassword = ref(false)
+                const passwordForm = ref({ oldPassword: '', newPassword: '', confirmPassword: '' })
+
+                const notification = ref({ show: false, type: 'success', message: '' })
+
+                const showNotif = (msg, type = 'success') => {
+                    notification.value.message = msg
+                    notification.value.type = type
+                    notification.value.show = true
+                    setTimeout(() => { notification.value.show = false }, 3000)
+                }
+
+                // Forms
+                const getToday = () => new Date().toISOString().split('T')[0]
+
+                const formatMoney = (val) => {
+                    return Number(val).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                }
+
+                const filteredIncomes = computed(() => {
+                    if (!incomeSearchQuery.value) return incomes.value
+                    const lowerQuery = incomeSearchQuery.value.toLowerCase()
+                    return incomes.value.filter(item =>
+                        item.villager_name.toLowerCase().includes(lowerQuery) ||
+                        item.group_name.toLowerCase().includes(lowerQuery)
+                    )
+                })
+
+                const filteredExpenses = computed(() => {
+                    if (!expenseSearchQuery.value) return expenses.value
+                    const lowerQuery = expenseSearchQuery.value.toLowerCase()
+                    return expenses.value.filter(item =>
+                        item.title.toLowerCase().includes(lowerQuery) ||
+                        item.handler.toLowerCase().includes(lowerQuery)
+                    )
+                })
+
+                const incomeForm = reactive({
+                    villager_name: '', group_name: '', amount: '', pay_date: getToday()
+                })
+
+                const expenseForm = reactive({
+                    title: '', amount: '', handler: '', expense_date: getToday(),
+                    file: null, previewImg: ''
+                })
+
+                const projectForm = reactive({ name: '' })
+                const editingProjectId = ref(null)
+                const editProjectForm = reactive({ name: '', status: 1 })
+
+                // Income/Expense Editing
+                const editingRecordType = ref(null) // 'income' or 'expense'
+                const editingRecordId = ref(null)
+                const editRecordForm = reactive({
+                    villager_name: '', group_name: '', amount: '', pay_date: '',
+                    title: '', handler: '', expense_date: ''
+                })
+
+                // --- Methods ---
+
+                // Actions
+                const login = async () => {
+                    loading.value = true
+                    try {
+                        const res = await axios.post('/api/admin/login', { password: password.value })
+                        token.value = res.data.token
+                        localStorage.setItem('village_token', token.value)
+                        axios.defaults.headers.common['Authorization'] = `Bearer ${token.value}`
+                        isLoggedIn.value = true
+                        showNotif('登录成功', 'success')
+                        loadProjects()
+                    } catch (e) {
+                        showNotif('登录失败，密码错误', 'error')
+                    } finally {
+                        loading.value = false
+                    }
+                }
+
+                const changePassword = async () => {
+                    if (passwordForm.value.newPassword !== passwordForm.value.confirmPassword) {
+                        showNotif('两次输入的新密码不一致', 'error')
+                        return
+                    }
+                    if (passwordForm.value.newPassword.length < 6) {
+                        showNotif('新密码长度不能少于 6 位', 'error')
+                        return
+                    }
+                    submittingPassword.value = true
+                    try {
+                        await axios.put('/api/admin/password', {
+                            old_password: passwordForm.value.oldPassword,
+                            new_password: passwordForm.value.newPassword
+                        })
+                        showNotif('密码修改成功，请重新登录', 'success')
+                        showPasswordModal.value = false
+                        passwordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' }
+                        setTimeout(logout, 1500)
+                    } catch (e) {
+                        showNotif(e.response?.data?.error || '修改密码失败，可能是原密码不正确', 'error')
+                    } finally {
+                        submittingPassword.value = false
+                    }
+                }
+
+                const logout = () => {
+                    localStorage.removeItem('village_token')
+                    isLoggedIn.value = false
+                }
+
+                const loadProjects = async () => {
+                    try {
+                        const res = await axios.get('/api/projects')
+                        projects.value = res.data.data || []
+                        if (projects.value.length > 0 && selectedProjectId.value === 0) {
+                            selectedProjectId.value = projects.value[0].ID
+                        }
+                    } catch (e) {
+                        console.error('Data load error', e)
+                    }
+                }
+
+                const loadIncomesAndExpenses = async (reset = true) => {
+                    if (!selectedProjectId.value) return
+                    if (reset) {
+                        incomesPage.value = 1
+                        expensesPage.value = 1
+                    }
+                    try {
+                        const [incRes, expRes] = await Promise.all([
+                            axios.get(`/api/incomes?project_id=${selectedProjectId.value}&page=${incomesPage.value}&limit=50`),
+                            axios.get(`/api/expenses?project_id=${selectedProjectId.value}&page=${expensesPage.value}&limit=50`)
+                        ])
+
+                        if (reset) {
+                            incomes.value = incRes.data.data || []
+                            expenses.value = expRes.data.data || []
+                        } else {
+                            // Only append if we aren't resetting, though this method is split into loadMore usually
+                        }
+
+                        incomesTotal.value = incRes.data.meta?.total || 0
+                        expensesTotal.value = expRes.data.meta?.total || 0
+
+                        await loadProjectStats()
+                    } catch (e) {
+                        console.error('Failed to load records', e)
+                    }
+                }
+
+                const loadProjectStats = async () => {
+                    if (!selectedProjectId.value) return
+                    try {
+                        const res = await axios.get(`/api/projects/${selectedProjectId.value}/stats`)
+                        projectStats.value = res.data
+                        if (activeTab.value === 'stats') {
+                            await initChart()
+                        }
+                    } catch (e) {
+                        console.error('Failed to load stats', e)
+                    }
+                }
+
+                const initChart = async () => {
+                    await Vue.nextTick()
+                    const chartDom = document.getElementById('monthlyChartAdmin')
+                    if (!chartDom) return
+                    let myChart = echarts.getInstanceByDom(chartDom)
+                    if (!myChart) {
+                        myChart = echarts.init(chartDom)
+                    }
+
+                    const stats = projectStats.value
+                    const monthsSet = new Set()
+                    if (stats.incomes) stats.incomes.forEach(i => monthsSet.add(i.month))
+                    if (stats.expenses) stats.expenses.forEach(e => monthsSet.add(e.month))
+
+                    const months = Array.from(monthsSet).sort()
+                    const incomeData = months.map(m => {
+                        const hit = stats.incomes ? stats.incomes.find(i => i.month === m) : null
+                        return hit ? hit.total : 0
+                    })
+                    const expenseData = months.map(m => {
+                        const hit = stats.expenses ? stats.expenses.find(e => e.month === m) : null
+                        return hit ? hit.total : 0
+                    })
+
+                    const option = {
+                        tooltip: { trigger: 'axis' },
+                        legend: { data: ['收入', '支出'], top: 0 },
+                        grid: { left: '3%', right: '4%', bottom: '3%', top: '15%', containLabel: true },
+                        xAxis: { type: 'category', data: months },
+                        yAxis: { type: 'value' },
+                        series: [
+                            { name: '收入', type: 'bar', data: incomeData, itemStyle: { color: '#ef4444' } },
+                            { name: '支出', type: 'bar', data: expenseData, itemStyle: { color: '#10b981' } }
+                        ]
+                    }
+                    myChart.setOption(option)
+                }
+
+                watch(activeTab, async (newTab) => {
+                    if (newTab === 'stats') {
+                        await initChart()
+                    } else if (newTab === 'audit') {
+                        await loadAuditLogs(true)
+                    } else if (newTab === 'income' || newTab === 'expense') {
+                        // Refresh data when switching to list tabs
+                        if (selectedProjectId.value) {
+                            await loadIncomesAndExpenses(true)
+                        }
+                    }
+                })
+
+                const loadAuditLogs = async (reset = true) => {
+                    if (reset) auditLogsPage.value = 1
+                    try {
+                        const res = await axios.get(`/api/admin/audit_logs?page=${auditLogsPage.value}&limit=50`)
+                        if (reset) {
+                            auditLogs.value = res.data.data || []
+                        } else {
+                            auditLogs.value = [...auditLogs.value, ...(res.data.data || [])]
+                        }
+                        auditLogsTotal.value = res.data.total || 0
+                    } catch (e) {
+                        console.error('Failed to load audit logs', e)
+                    }
+                }
+
+                const loadMoreAuditLogs = async () => {
+                    if (loadingMoreAuditLogs.value) return
+                    loadingMoreAuditLogs.value = true
+                    auditLogsPage.value++
+                    await loadAuditLogs(false)
+                    loadingMoreAuditLogs.value = false
+                }
+
+                const loadMoreIncomes = async () => {
+                    if (!selectedProjectId.value || loadingMoreIncomes.value) return
+                    loadingMoreIncomes.value = true
+                    incomesPage.value++
+                    try {
+                        const res = await axios.get(`/api/incomes?project_id=${selectedProjectId.value}&page=${incomesPage.value}&limit=50`)
+                        incomes.value = [...incomes.value, ...(res.data.data || [])]
+                    } catch (e) {
+                        console.error('Failed to load more incomes', e)
+                    } finally {
+                        loadingMoreIncomes.value = false
+                    }
+                }
+
+                const loadMoreExpenses = async () => {
+                    if (!selectedProjectId.value || loadingMoreExpenses.value) return
+                    loadingMoreExpenses.value = true
+                    expensesPage.value++
+                    try {
+                        const res = await axios.get(`/api/expenses?project_id=${selectedProjectId.value}&page=${expensesPage.value}&limit=50`)
+                        expenses.value = [...expenses.value, ...(res.data.data || [])]
+                    } catch (e) {
+                        console.error('Failed to load more expenses', e)
+                    } finally {
+                        loadingMoreExpenses.value = false
+                    }
+                }
+
+                watch(selectedProjectId, () => {
+                    if (selectedProjectId.value) {
+                        loadIncomesAndExpenses()
+                    }
+                })
+
+                const submitProject = async () => {
+                    submitting.value = true
+                    try {
+                        await axios.post('/api/admin/projects', { name: projectForm.name })
+                        showNotif('新项目创建成功')
+                        projectForm.name = ''
+                        await loadProjects()
+                    } catch (e) {
+                        showNotif('创建项目失败', 'error')
+                    } finally {
+                        submitting.value = false
+                    }
+                }
+
+                const startEditProject = (p) => {
+                    editingProjectId.value = p.ID
+                    editProjectForm.name = p.name
+                    editProjectForm.status = p.status
+                }
+
+                const cancelEditProject = () => {
+                    editingProjectId.value = null
+                }
+
+                const saveEditProject = async (id) => {
+                    if (!editProjectForm.name.trim()) return showNotif('项目名称不能为空', 'error')
+
+                    try {
+                        await axios.put(`/api/admin/projects/${id}`, {
+                            name: editProjectForm.name,
+                            status: Number(editProjectForm.status)
+                        })
+                        showNotif('项目修改成功')
+                        editingProjectId.value = null
+                        await loadProjects()
+                    } catch (e) {
+                        showNotif('修改项目失败', 'error')
+                    }
+                }
+
+                const submitIncome = async () => {
+                    if (selectedProjectId.value === 0) return showNotif('请先选择项目', 'error')
+                    submitting.value = true
+                    try {
+                        await axios.post('/api/admin/incomes', {
+                            project_id: Number(selectedProjectId.value),
+                            amount: Number(incomeForm.amount),
+                            villager_name: incomeForm.villager_name,
+                            group_name: incomeForm.group_name,
+                            pay_date: incomeForm.pay_date
+                        })
+                        showNotif('收入记录保存成功')
+                        // reset form except date
+                        incomeForm.villager_name = ''
+                        incomeForm.amount = ''
+                        await loadIncomesAndExpenses()
+                    } catch (e) {
+                        showNotif('保存失败', 'error')
+                    } finally {
+                        submitting.value = false
+                    }
+                }
+
+                const handleFileUpload = (e) => {
+                    const file = e.target.files[0]
+                    if (file) {
+                        expenseForm.file = file
+                        // Preview
+                        const reader = new FileReader()
+                        reader.onload = (e) => {
+                            expenseForm.previewImg = e.target.result
+                        }
+                        reader.readAsDataURL(file)
+                    }
+                }
+
+                const triggerExcelImport = (type) => {
+                    if (!selectedProjectId.value) {
+                        notification.value = { show: true, type: 'error', message: '请先在上方选择目标项目' }
+                        setTimeout(() => notification.value.show = false, 3000)
+                        return
+                    }
+                    importType.value = type
+                    if (excelFileInput.value) excelFileInput.value.click()
+                }
+
+                const handleExcelUpload = async (event) => {
+                    const file = event.target.files[0]
+                    if (!file || !selectedProjectId.value) return
+
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    formData.append('project_id', selectedProjectId.value)
+
+                    importingExcel.value = true
+                    notification.value = { show: true, type: 'success', message: '正在处理 Excel 并导入...' }
+
+                    try {
+                        const res = await axios.post(`/api/admin/${importType.value}s/import`, formData, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                        })
+                        notification.value = { show: true, type: 'success', message: res.data.message || '导入成功' }
+                        setTimeout(() => notification.value.show = false, 3000)
+
+                        await loadIncomesAndExpenses(true)
+                    } catch (e) {
+                        console.error('Import failed', e)
+                        const msg = e.response?.data?.error || '导入失败，请检查文件格式是否遵循模板'
+                        notification.value = { show: true, type: 'error', message: msg }
+                        setTimeout(() => notification.value.show = false, 5000)
+                    } finally {
+                        importingExcel.value = false
+                        event.target.value = ''
+                    }
+                }
+
+                const submitExpense = async () => {
+                    if (selectedProjectId.value === 0) return showNotif('请先选择项目', 'error')
+                    if (!expenseForm.file) return showNotif('必须上传凭证图', 'error')
+
+                    submitting.value = true
+                    try {
+                        // 1. Upload image
+                        const formData = new FormData()
+                        formData.append('file', expenseForm.file)
+                        const uploadRes = await axios.post('/api/admin/upload', formData)
+                        const imgUrl = uploadRes.data.url
+
+                        // 2. Submit expense
+                        await axios.post('/api/admin/expenses', {
+                            project_id: Number(selectedProjectId.value),
+                            title: expenseForm.title,
+                            amount: Number(expenseForm.amount),
+                            handler: expenseForm.handler,
+                            expense_date: expenseForm.expense_date,
+                            receipt_img: imgUrl
+                        })
+
+                        showNotif('支出记录保存成功')
+                        // Reset form
+                        expenseForm.title = ''
+                        expenseForm.amount = ''
+                        expenseForm.file = null
+                        expenseForm.previewImg = ''
+                        document.querySelector('input[type="file"]').value = '' // Clear file input
+                        await loadIncomesAndExpenses()
+                    } catch (e) {
+                        showNotif('保存失败: ' + (e.response?.data?.error || e.message), 'error')
+                    } finally {
+                        submitting.value = false
+                    }
+                }
+
+                onMounted(() => {
+                    if (localStorage.getItem('village_token')) {
+                        isLoggedIn.value = true
+                        loadProjects().then(() => {
+                            if (selectedProjectId.value) loadIncomesAndExpenses()
+                        })
+                    }
+                })
+
+                // Record Editing Methods
+                const startEditRecord = (type, record) => {
+                    editingRecordType.value = type
+                    editingRecordId.value = record.ID
+                    if (type === 'income') {
+                        editRecordForm.villager_name = record.villager_name
+                        editRecordForm.group_name = record.group_name
+                        editRecordForm.amount = record.amount
+                        editRecordForm.pay_date = record.pay_date ? record.pay_date.split('T')[0] : ''
+                    } else {
+                        editRecordForm.title = record.title
+                        editRecordForm.handler = record.handler
+                        editRecordForm.amount = record.amount
+                        editRecordForm.expense_date = record.expense_date ? record.expense_date.split('T')[0] : ''
+                    }
+                }
+
+                const cancelEditRecord = () => {
+                    editingRecordType.value = null
+                    editingRecordId.value = null
+                }
+
+                const saveEditIncome = async (id) => {
+                    savingRecordId.value = id
+                    try {
+                        await axios.put(`/api/admin/incomes/${id}`, {
+                            villager_name: editRecordForm.villager_name,
+                            group_name: editRecordForm.group_name,
+                            amount: Number(editRecordForm.amount),
+                            pay_date: editRecordForm.pay_date
+                        })
+                        showNotif('修改收入记录成功')
+                        cancelEditRecord()
+                        await loadIncomesAndExpenses()
+                    } catch (e) {
+                        showNotif('修改失败: ' + (e.response?.data?.error || e.message), 'error')
+                    } finally {
+                        savingRecordId.value = null
+                    }
+                }
+
+                const saveEditExpense = async (id) => {
+                    savingRecordId.value = id
+                    try {
+                        await axios.put(`/api/admin/expenses/${id}`, {
+                            title: editRecordForm.title,
+                            handler: editRecordForm.handler,
+                            amount: Number(editRecordForm.amount),
+                            expense_date: editRecordForm.expense_date
+                        })
+                        showNotif('修改支出记录成功')
+                        cancelEditRecord()
+                        await loadIncomesAndExpenses()
+                    } catch (e) {
+                        showNotif('修改失败: ' + (e.response?.data?.error || e.message), 'error')
+                    } finally {
+                        savingRecordId.value = null
+                    }
+                }
+
+                const deleteRecord = async (type, id) => {
+                    const recordName = type === 'income' ? '收入' : '支出'
+                    if (!confirm(`确定要删除这条${recordName}记录吗？此操作不可恢复。`)) return
+
+                    try {
+                        await axios.delete(`/api/admin/${type}s/${id}`)
+                        showNotif(`成功删除${recordName}记录`)
+                        await loadIncomesAndExpenses()
+                    } catch (e) {
+                        showNotif(`删除失败: ` + (e.response?.data?.error || e.message), 'error')
+                    }
+                }
+
+                const exportData = () => {
+                    if (!selectedProjectId.value) return showNotif('请先选择项目', 'error')
+                    const token = localStorage.getItem('village_token')
+                    window.open(`/api/admin/projects/${selectedProjectId.value}/export?token=${token}`, '_blank')
+                }
+
+                return {
+                    isLoggedIn, password, loading, submitting, loginError,
+                    login, logout, formatMoney,
+                    activeTab, projects, selectedProjectId, incomes, expenses, incomesTotal, expensesTotal,
+                    incomeForm, expenseForm, projectForm, incomeSearchQuery, expenseSearchQuery, filteredIncomes, filteredExpenses,
+                    loadingMoreIncomes, loadingMoreExpenses, savingRecordId,
+                    submitIncome, submitExpense, submitProject,
+                    editingProjectId, editProjectForm, startEditProject, cancelEditProject, saveEditProject,
+                    editingRecordType, editingRecordId, editRecordForm, startEditRecord, cancelEditRecord, saveEditIncome, saveEditExpense, deleteRecord,
+                    loadIncomesAndExpenses, loadMoreIncomes, loadMoreExpenses, exportData,
+                    auditLogs, auditLogsTotal, loadingMoreAuditLogs, loadAuditLogs, loadMoreAuditLogs,
+                    handleFileUpload, notification, token, excelFileInput, triggerExcelImport, handleExcelUpload, importType, importingExcel,
+                    showPasswordModal, submittingPassword, passwordForm, changePassword
+                }
+            }
+        }).mount('#app')
+    </script>
+</body>
+
+</html>

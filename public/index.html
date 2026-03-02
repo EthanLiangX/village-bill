@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>村集体财务公开公示系统 - 数字红榜</title>
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#fef2f2',
+                            100: '#fee2e2',
+                            500: '#ef4444',
+                            600: '#dc2626',
+                            700: '#b91c1c',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Axios -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        [v-cloak] {
+            display: none;
+        }
+
+        .hero-card {
+            background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+            box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.4);
+        }
+
+        .modal {
+            background-color: rgba(0, 0, 0, 0.9);
+        }
+
+        /* Hide scrollbar for tab container */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 text-gray-800 font-sans antialiased">
+    <div id="app" v-cloak class="max-w-3xl mx-auto min-h-screen bg-white shadow-xl relative pb-10">
+        <!-- Header / Project Switcher -->
+        <div
+            class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+            <h1 class="text-lg font-bold text-gray-800 flex items-center">
+                <i class="fa-solid fa-bullhorn text-brand-600 mr-2"></i>数字红榜
+            </h1>
+            <div class="relative">
+                <select v-model="currentProjectId" @change="loadProjectData"
+                    class="appearance-none bg-gray-100 border-none text-sm font-medium text-gray-700 py-2 pl-3 pr-8 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-500 max-w-[150px] truncate cursor-pointer transition-all">
+                    <option v-for="p in projects" :key="p.ID" :value="p.ID">{{ p.name }}</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                    <i class="fa-solid fa-chevron-down text-xs"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Floating Data Hero Section -->
+        <div class="px-4 py-5 z-10 relative">
+            <div class="hero-card rounded-2xl p-6 text-white relative overflow-hidden">
+                <!-- Decorative circles -->
+                <div class="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full bg-white opacity-10"></div>
+                <div class="absolute bottom-0 left-0 -ml-8 -mb-8 w-24 h-24 rounded-full bg-white opacity-10"></div>
+
+                <h2 class="text-brand-100 text-sm font-medium mb-1">{{ currentProjectName || '加载中...' }}</h2>
+                <div class="flex items-baseline mb-6">
+                    <span class="text-xs mr-1">¥</span>
+                    <span class="text-4xl font-extrabold tracking-tight">{{ formatMoney(projectSummary.balance)
+                        }}</span>
+                    <span class="ml-2 text-xs text-brand-100 bg-white/20 px-2 py-0.5 rounded-full">当前结余</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 border-t border-white/20 pt-4">
+                    <div>
+                        <p class="text-brand-100 text-xs mb-1"><i class="fa-solid fa-arrow-trend-up mr-1"></i>已筹总额</p>
+                        <p class="text-lg font-bold">¥{{ formatMoney(projectSummary.total_income) }}</p>
+                    </div>
+                    <div>
+                        <p class="text-brand-100 text-xs mb-1"><i class="fa-solid fa-arrow-trend-down mr-1"></i>已出总额</p>
+                        <p class="text-lg font-bold">¥{{ formatMoney(projectSummary.total_expense) }}</p>
+                    </div>
+                </div>
+
+                <div v-if="projectSummary.status === 2"
+                    class="absolute top-4 right-4 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded shadow">
+                    已结项
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex border-b border-gray-200 px-4 mt-2 sticky top-[60px] bg-white z-30">
+            <button @click="activeTab = 'income'"
+                :class="['flex-1 py-3 text-sm font-medium border-b-2 transition-colors', activeTab === 'income' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 border-none']">
+                <i class="fa-solid fa-hand-holding-dollar mr-1"></i> 光荣榜 (收入)
+            </button>
+            <button @click="activeTab = 'expense'"
+                :class="['flex-1 py-3 text-sm font-medium border-b-2 transition-colors', activeTab === 'expense' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 border-none']">
+                <i class="fa-solid fa-receipt mr-1"></i> 明白账 (支出)
+            </button>
+            <button @click="activeTab = 'stats'"
+                :class="['flex-1 py-3 text-sm font-medium border-b-2 transition-colors', activeTab === 'stats' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 border-none']">
+                <i class="fa-solid fa-chart-pie mr-1"></i> 数据看板
+            </button>
+        </div>
+
+        <!-- Content Area -->
+        <div class="px-4 py-4 min-h-[400px]">
+
+            <!-- Loader -->
+            <div v-if="loading" class="flex justify-center items-center py-20">
+                <i class="fa-solid fa-spinner fa-spin text-brand-500 text-2xl"></i>
+            </div>
+
+            <template v-else>
+                <!-- Empty State -->
+                <div v-if="(activeTab === 'income' && incomes.length === 0 && !loading) || (activeTab === 'expense' && expenses.length === 0 && !loading)"
+                    class="flex flex-col items-center justify-center py-20 text-gray-400 opacity-80">
+                    <img src="https://api.iconify.design/noto-v1:open-file-folder.svg" alt="Empty"
+                        class="w-24 h-24 mb-4 grayscale opacity-50">
+                    <p class="text-sm font-medium">这个项目还是一张白纸</p>
+                    <p class="text-xs mt-1">暂无相关财务收支记录</p>
+                </div>
+
+                <!-- Income List -->
+                <div v-show="activeTab === 'income' && incomes.length > 0" class="space-y-4">
+                    <div class="relative mb-4">
+                        <i class="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-gray-400 text-sm"></i>
+                        <input v-model="searchQuery" type="text" placeholder="搜索村民姓名或组别..."
+                            class="w-full bg-gray-50 border border-gray-200 rounded-full py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 transition-shadow">
+                    </div>
+
+                    <!-- Totalling Banner -->
+                    <div v-if="filteredIncomes.length > 0"
+                        class="bg-brand-50 border-l-4 border-brand-500 rounded-r-xl p-3 flex justify-between items-center shadow-sm">
+                        <span class="text-sm font-medium text-brand-800">当前页总记入</span>
+                        <span class="font-bold text-brand-600">¥{{ formatMoney(loadedIncomesTotal) }}</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                        <div v-for="item in filteredIncomes" :key="item.ID"
+                            class="bg-white border border-gray-100 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div
+                                    class="w-10 h-10 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center font-bold mr-3 border border-brand-100">
+                                    {{ item.villager_name.charAt(0) }}
+                                </div>
+                                <div>
+                                    <h3 class="font-bold text-gray-800">{{ item.villager_name }}</h3>
+                                    <p class="text-xs text-gray-500"><i class="fa-regular fa-calendar mr-1"></i>{{
+                                        item.pay_date }} <span class="mx-1 text-gray-300">|</span> <span
+                                            class="bg-gray-100 px-1.5 py-0.5 rounded text-[10px]">{{ item.group_name
+                                            }}</span></p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-bold text-brand-600 text-lg">+{{ formatMoney(item.amount) }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Load More Incomes Button -->
+                    <div v-if="incomesTotal > incomes.length" class="mt-4 text-center pb-4">
+                        <button @click="loadMoreIncomes" type="button" :disabled="loadingMoreIncomes"
+                            class="text-xs bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 font-medium py-2 px-6 rounded-full shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 flex items-center justify-center mx-auto">
+                            <i v-if="loadingMoreIncomes" class="fa-solid fa-spinner fa-spin mr-1"></i>
+                            {{ loadingMoreIncomes ? '正在加载...' : `加载更多 (已显示 ${incomes.length} / 共 ${incomesTotal} 条)` }}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Expense List -->
+                <div v-show="activeTab === 'expense' && expenses.length > 0" class="space-y-4">
+                    <div class="relative mb-4">
+                        <i class="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-gray-400 text-sm"></i>
+                        <input v-model="expenseSearchQuery" type="text" placeholder="搜索支出摘要或经手人..."
+                            class="w-full bg-gray-50 border border-gray-200 rounded-full py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 transition-shadow">
+                    </div>
+
+                    <!-- Totalling Banner -->
+                    <div v-if="filteredExpenses.length > 0"
+                        class="bg-blue-50 border-l-4 border-blue-500 rounded-r-xl p-3 flex justify-between items-center shadow-sm">
+                        <span class="text-sm font-medium text-blue-800">当前页总支出</span>
+                        <span class="font-bold text-blue-600">¥{{ formatMoney(loadedExpensesTotal) }}</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                        <div v-for="item in filteredExpenses" :key="item.ID"
+                            class="bg-white border border-gray-100 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                            <!-- Decorative left border -->
+                            <div
+                                class="absolute left-0 top-0 bottom-0 w-1 bg-gray-200 group-hover:bg-brand-400 transition-colors">
+                            </div>
+
+                            <div class="flex justify-between items-start mb-2 pl-2">
+                                <h3 class="font-bold text-gray-800 flex-1">{{ item.title }}</h3>
+                                <span class="font-bold text-gray-800 text-lg ml-2">-{{ formatMoney(item.amount)
+                                    }}</span>
+                            </div>
+                            <div class="pl-2 flex justify-between items-end">
+                                <div class="text-xs text-gray-500 space-y-1">
+                                    <p><i class="fa-regular fa-calendar w-4"></i>{{ item.expense_date }}</p>
+                                    <p><i class="fa-regular fa-user w-4"></i>经手: {{ item.handler }}</p>
+                                </div>
+                                <button v-if="item.receipt_img" @click="openGallery(item.receipt_img)"
+                                    class="text-xs bg-brand-50 text-brand-600 px-3 py-1.5 rounded-lg font-medium hover:bg-brand-100 transition-colors flex items-center">
+                                    <i class="fa-regular fa-image mr-1"></i> 查看凭证
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Load More Expenses Button -->
+                    <div v-if="expensesTotal > expenses.length" class="mt-4 text-center pb-4">
+                        <button @click="loadMoreExpenses" type="button" :disabled="loadingMoreExpenses"
+                            class="text-xs bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 font-medium py-2 px-6 rounded-full shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 flex items-center justify-center mx-auto">
+                            <i v-if="loadingMoreExpenses" class="fa-solid fa-spinner fa-spin mr-1"></i>
+                            {{ loadingMoreExpenses ? '正在加载...' : `加载更多 (已显示 ${expenses.length} / 共 ${expensesTotal} 条)`
+                            }}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats View -->
+                <div v-show="activeTab === 'stats'" class="space-y-4 pt-2">
+                    <div class="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+                        <h3 class="font-bold text-gray-800 mb-4 border-l-4 border-brand-500 pl-2">月度收支趋势</h3>
+                        <div id="monthlyChart" class="w-full h-64"></div>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Image Gallery Modal (Lightbox) -->
+        <div v-if="galleryOpen"
+            class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/90 backdrop-blur-sm transition-opacity"
+            @click="galleryOpen = false">
+            <div class="relative w-full h-full flex flex-col items-center justify-center max-w-5xl mx-auto" @click.stop>
+                <!-- Close Button -->
+                <button
+                    class="absolute top-0 right-0 z-50 p-4 text-white/70 hover:text-white transition-colors focus:outline-none"
+                    @click="galleryOpen = false">
+                    <div
+                        class="bg-black/50 hover:bg-black/80 rounded-full w-10 h-10 flex items-center justify-center backdrop-blur-md">
+                        <i class="fa-solid fa-xmark text-xl"></i>
+                    </div>
+                </button>
+
+                <!-- Main Graphic -->
+                <img :src="currentImage"
+                    class="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl transition-transform transform scale-100 hover:scale-[1.02] cursor-zoom-in"
+                    alt="支出凭证大图">
+
+                <p
+                    class="text-white/60 mt-6 text-sm flex items-center bg-black/40 px-4 py-2 rounded-full backdrop-blur-md">
+                    <i class="fa-solid fa-hand-pointer mr-2"></i> 点击遮罩任意区域关闭
+                </p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, watch } = Vue
+
+        createApp({
+            setup() {
+                const projects = ref([])
+                const currentProjectId = ref('')
+                const projectSummary = ref({ total_income: 0, total_expense: 0, balance: 0, status: 1 })
+                const incomes = ref([])
+                const incomesPage = ref(1)
+                const incomesTotal = ref(0)
+                const expenses = ref([])
+                const expensesPage = ref(1)
+                const expensesTotal = ref(0)
+                const activeTab = ref('income')
+                const projectStats = ref({ incomes: [], expenses: [] })
+                const loading = ref(true)
+                const loadingMoreIncomes = ref(false)
+                const loadingMoreExpenses = ref(false)
+                const searchQuery = ref('')
+                const expenseSearchQuery = ref('')
+
+                const galleryOpen = ref(false)
+                const currentImage = ref('')
+
+                const formatMoney = (val) => {
+                    return Number(val).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                }
+
+                const currentProjectName = computed(() => {
+                    const p = projects.value.find(p => p.ID == currentProjectId.value)
+                    return p ? p.name : ''
+                })
+
+                const filteredIncomes = computed(() => {
+                    if (!searchQuery.value) return incomes.value
+                    const lowerQuery = searchQuery.value.toLowerCase()
+                    return incomes.value.filter(item =>
+                        item.villager_name.toLowerCase().includes(lowerQuery) ||
+                        item.group_name.toLowerCase().includes(lowerQuery)
+                    )
+                })
+
+                const filteredExpenses = computed(() => {
+                    if (!expenseSearchQuery.value) return expenses.value
+                    const lowerQuery = expenseSearchQuery.value.toLowerCase()
+                    return expenses.value.filter(item =>
+                        item.title.toLowerCase().includes(lowerQuery) ||
+                        item.handler.toLowerCase().includes(lowerQuery)
+                    )
+                })
+
+                const loadedIncomesTotal = computed(() => {
+                    return filteredIncomes.value.reduce((acc, curr) => acc + Number(curr.amount), 0)
+                })
+
+                const loadedExpensesTotal = computed(() => {
+                    return filteredExpenses.value.reduce((acc, curr) => acc + Number(curr.amount), 0)
+                })
+
+                const loadProjects = async () => {
+                    try {
+                        const res = await axios.get('/api/projects')
+                        if (res.data.data && res.data.data.length > 0) {
+                            projects.value = res.data.data
+                            currentProjectId.value = projects.value[0].ID
+                            await loadProjectData()
+                        } else {
+                            loading.value = false
+                        }
+                    } catch (e) {
+                        console.error('Failed to load projects', e)
+                        loading.value = false
+                    }
+                }
+
+                const loadProjectSummary = async () => {
+                    try {
+                        const res = await axios.get('/api/projects/latest')
+                        projectSummary.value = res.data
+                        // Sync current project selection if it's the latest
+                        if (projects.value.length === 0) {
+                            projects.value = [{ ID: res.data.project_id, name: res.data.project_name }]
+                            currentProjectId.value = res.data.project_id
+                        }
+                    } catch (e) {
+                        console.error('Failed to load summary', e)
+                    }
+                }
+
+                const loadProjectData = async () => {
+                    if (!currentProjectId.value) return
+                    loading.value = true
+                    incomesPage.value = 1
+                    expensesPage.value = 1
+                    try {
+                        const [incRes, expRes] = await Promise.all([
+                            axios.get(`/api/incomes?project_id=${currentProjectId.value}&page=${incomesPage.value}&limit=50`),
+                            axios.get(`/api/expenses?project_id=${currentProjectId.value}&page=${expensesPage.value}&limit=50`)
+                        ])
+
+                        incomes.value = incRes.data.data || []
+                        expenses.value = expRes.data.data || []
+
+                        incomesTotal.value = incRes.data.meta?.total || 0
+                        expensesTotal.value = expRes.data.meta?.total || 0
+
+                        // Recalculate summary locally based on fetched list
+                        let tIn = incomes.value.reduce((acc, curr) => acc + Number(curr.amount), 0)
+                        let tEx = expenses.value.reduce((acc, curr) => acc + Number(curr.amount), 0)
+
+                        const curProj = projects.value.find(p => p.ID == currentProjectId.value)
+
+                        projectSummary.value = {
+                            total_income: tIn,
+                            total_expense: tEx,
+                            balance: tIn - tEx,
+                            status: curProj ? curProj.status : 1
+                        }
+
+                        // Also fetch stats for the chart
+                        await loadProjectStats()
+
+                    } catch (e) {
+                        console.error('Failed to load data', e)
+                    } finally {
+                        loading.value = false
+                    }
+                }
+
+                const loadProjectStats = async () => {
+                    if (!currentProjectId.value) return
+                    try {
+                        const res = await axios.get(`/api/projects/${currentProjectId.value}/stats`)
+                        projectStats.value = res.data
+                        if (activeTab.value === 'stats') {
+                            await initChart()
+                        }
+                    } catch (e) {
+                        console.error('Failed to load stats', e)
+                    }
+                }
+
+                const initChart = async () => {
+                    await Vue.nextTick()
+                    const chartDom = document.getElementById('monthlyChart')
+                    if (!chartDom) return
+                    let myChart = echarts.getInstanceByDom(chartDom)
+                    if (!myChart) {
+                        myChart = echarts.init(chartDom)
+                    }
+
+                    const stats = projectStats.value
+                    const monthsSet = new Set()
+                    if (stats.incomes) stats.incomes.forEach(i => monthsSet.add(i.month))
+                    if (stats.expenses) stats.expenses.forEach(e => monthsSet.add(e.month))
+
+                    const months = Array.from(monthsSet).sort()
+                    const incomeData = months.map(m => {
+                        const hit = stats.incomes ? stats.incomes.find(i => i.month === m) : null
+                        return hit ? hit.total : 0
+                    })
+                    const expenseData = months.map(m => {
+                        const hit = stats.expenses ? stats.expenses.find(e => e.month === m) : null
+                        return hit ? hit.total : 0
+                    })
+
+                    const option = {
+                        tooltip: { trigger: 'axis' },
+                        legend: { data: ['收入', '支出'], bottom: 0 },
+                        grid: { left: '3%', right: '4%', bottom: '15%', top: '5%', containLabel: true },
+                        xAxis: { type: 'category', data: months },
+                        yAxis: { type: 'value' },
+                        series: [
+                            { name: '收入', type: 'bar', data: incomeData, itemStyle: { color: '#ef4444' } },
+                            { name: '支出', type: 'bar', data: expenseData, itemStyle: { color: '#10b981' } }
+                        ]
+                    }
+                    myChart.setOption(option)
+                }
+
+                watch(activeTab, async (newTab) => {
+                    if (newTab === 'stats') {
+                        await initChart()
+                    } else if (newTab === 'income' || newTab === 'expense') {
+                        // Refresh data when switching to list tabs
+                        if (currentProjectId.value) {
+                            await loadProjectData()
+                        }
+                    }
+                })
+
+                const openGallery = (imgUrl) => {
+                    currentImage.value = imgUrl
+                    galleryOpen.value = true
+                }
+
+                onMounted(() => {
+                    loadProjects()
+                })
+
+                const loadMoreIncomes = async () => {
+                    if (!currentProjectId.value || loadingMoreIncomes.value) return
+                    loadingMoreIncomes.value = true
+                    incomesPage.value++
+                    try {
+                        const res = await axios.get(`/api/incomes?project_id=${currentProjectId.value}&page=${incomesPage.value}&limit=50`)
+                        incomes.value = [...incomes.value, ...(res.data.data || [])]
+                    } catch (e) {
+                        console.error('Failed to load more incomes', e)
+                    } finally {
+                        loadingMoreIncomes.value = false
+                    }
+                }
+
+                const loadMoreExpenses = async () => {
+                    if (!currentProjectId.value || loadingMoreExpenses.value) return
+                    loadingMoreExpenses.value = true
+                    expensesPage.value++
+                    try {
+                        const res = await axios.get(`/api/expenses?project_id=${currentProjectId.value}&page=${expensesPage.value}&limit=50`)
+                        expenses.value = [...expenses.value, ...(res.data.data || [])]
+                    } catch (e) {
+                        console.error('Failed to load more expenses', e)
+                    } finally {
+                        loadingMoreExpenses.value = false
+                    }
+                }
+
+                return {
+                    projects, currentProjectId, projectSummary,
+                    activeTab, incomes, expenses,
+                    loading, formatMoney,
+                    searchQuery, expenseSearchQuery, filteredIncomes, filteredExpenses,
+                    loadedIncomesTotal, loadedExpensesTotal,
+                    loadingMoreIncomes, loadingMoreExpenses, loadMoreIncomes, loadMoreExpenses, incomesTotal, expensesTotal,
+                    galleryOpen, currentImage, openGallery,
+                    currentProjectName, loadProjectData // Kept existing returns
+                }
+            }
+        }).mount('#app')
+    </script>
+</body>
+
+</html>
