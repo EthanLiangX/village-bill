@@ -649,8 +649,10 @@ func ImportExpenses(c *gin.Context) {
 }
 
 func DownloadBackup(c *gin.Context) {
-	dbPath := "village-bill.db" // Note: This should match the DB path used in database/sqlite.go
-
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "village-bill.db"
+	}
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Database file not found"})
 		return
