@@ -155,8 +155,8 @@
                     <!-- Totalling Banner -->
                     <div v-if="filteredIncomes.length > 0"
                         class="bg-brand-50 border-l-4 border-brand-500 rounded-r-xl p-3 flex justify-between items-center shadow-sm">
-                        <span class="text-sm font-medium text-brand-800">当前页总记入</span>
-                        <span class="font-bold text-brand-600">¥{{ formatMoney(loadedIncomesTotal) }}</span>
+                        <span class="text-sm font-medium text-brand-800">总记入</span>
+                        <span class="font-bold text-brand-600">¥{{ formatMoney(projectSummary.total_income) }}</span>
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -203,8 +203,8 @@
                     <!-- Totalling Banner -->
                     <div v-if="filteredExpenses.length > 0"
                         class="bg-blue-50 border-l-4 border-blue-500 rounded-r-xl p-3 flex justify-between items-center shadow-sm">
-                        <span class="text-sm font-medium text-blue-800">当前页总支出</span>
-                        <span class="font-bold text-blue-600">¥{{ formatMoney(loadedExpensesTotal) }}</span>
+                        <span class="text-sm font-medium text-blue-800">总支出</span>
+                        <span class="font-bold text-blue-600">¥{{ formatMoney(projectSummary.total_expense) }}</span>
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
