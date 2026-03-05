@@ -23,3 +23,4 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - DB_PATH=data/village-bill.db
+      - JWT_SECRET=c2f30b91d3cc27cfec349a2a3e5c70df71a3980b # Change this in production

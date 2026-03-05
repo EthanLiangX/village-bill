@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"image"
@@ -15,6 +16,7 @@ import (
 	_ "image/png"
 
 	"github.com/nfnt/resize"
+	"gorm.io/gorm"
 
 	"village-bill/database"
 	"village-bill/middleware"
@@ -79,7 +81,21 @@ func parseExcelDate(dateStr string) string {
 	return dateStr // Fallback to raw string if all parsing fails
 }
 
+var (
+	loginAttempts = make(map[string]int)
+	loginMux      sync.Mutex
+)
+
 func Login(c *gin.Context) {
+	ip := c.ClientIP()
+	loginMux.Lock()
+	if loginAttempts[ip] >= 10 {
+		loginMux.Unlock()
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many failed login attempts"})
+		return
+	}
+	loginMux.Unlock()
+
 	var body struct {
 		Password string `json:"password"`
 	}
@@ -95,9 +111,17 @@ func Login(c *gin.Context) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(adminUser.PasswordHash), []byte(body.Password)); err != nil {
+		loginMux.Lock()
+		loginAttempts[ip]++
+		loginMux.Unlock()
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Incorrect password"})
 		return
 	}
+
+	// Success, reset attempts
+	loginMux.Lock()
+	delete(loginAttempts, ip)
+	loginMux.Unlock()
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"admin":    true,
@@ -219,6 +243,15 @@ func AddIncome(c *gin.Context) {
 		return
 	}
 
+	if income.Amount <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Amount must be greater than 0"})
+		return
+	}
+	if income.PayDate == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Pay date is required"})
+		return
+	}
+
 	if err := database.DB.Create(&income).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add income"})
 		return
@@ -233,6 +266,15 @@ func AddExpense(c *gin.Context) {
 	var expense models.Expense
 	if err := c.ShouldBindJSON(&expense); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if expense.Amount <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Amount must be greater than 0"})
+		return
+	}
+	if expense.ExpenseDate == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Expense date is required"})
 		return
 	}
 
@@ -253,6 +295,11 @@ func UploadImage(c *gin.Context) {
 		return
 	}
 
+	if file.Size > 10*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File size exceeds 10MB limit"})
+		return
+	}
+
 	ext := strings.ToLower(filepath.Ext(file.Filename))
 	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported file type. Only JPG, PNG, and WebP are allowed."})
@@ -265,6 +312,18 @@ func UploadImage(c *gin.Context) {
 		return
 	}
 	defer srcFile.Close()
+
+	buffer := make([]byte, 512)
+	if _, err := srcFile.Read(buffer); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read file"})
+		return
+	}
+	srcFile.Seek(0, 0)
+	contentType := http.DetectContentType(buffer)
+	if !strings.HasPrefix(contentType, "image/") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid image content type"})
+		return
+	}
 
 	img, _, err := image.Decode(srcFile)
 	if err != nil {
@@ -429,9 +488,14 @@ func ExportProjectExcel(c *gin.Context) {
 		f.SetCellValue(sheet2, fmt.Sprintf("D%d", row), exp.ExpenseDate)
 
 		if exp.ReceiptImg != "" {
-			// ReceiptImg is typically "/uploads/filename.ext".
-			// We need to point to the local filesystem path.
-			localPath := "." + exp.ReceiptImg
+			cleanPath := filepath.Clean(exp.ReceiptImg)
+			// Ensure it only reads from the uploads directory to prevent path traversal
+			if !strings.HasPrefix(cleanPath, "/uploads") && !strings.HasPrefix(cleanPath, "uploads") {
+				f.SetCellValue(sheet2, fmt.Sprintf("E%d", row), "(图片路径不合法)")
+				continue
+			}
+
+			localPath := filepath.Join(".", cleanPath)
 			if _, err := os.Stat(localPath); err == nil {
 				f.SetRowHeight(sheet2, row, 100)
 				f.AddPicture(sheet2, fmt.Sprintf("E%d", row), localPath, &excelize.GraphicOptions{
@@ -443,7 +507,7 @@ func ExportProjectExcel(c *gin.Context) {
 				})
 			} else {
 				// Try falling back to stripping the leading slash
-				fallbackPath := strings.TrimPrefix(exp.ReceiptImg, "/")
+				fallbackPath := strings.TrimPrefix(cleanPath, "/")
 				if _, err := os.Stat(fallbackPath); err == nil {
 					f.SetRowHeight(sheet2, row, 100)
 					f.AddPicture(sheet2, fmt.Sprintf("E%d", row), fallbackPath, &excelize.GraphicOptions{
@@ -479,7 +543,15 @@ func ExportProjectExcel(c *gin.Context) {
 
 func GetAuditLogs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if limit < 1 {
+		limit = 50
+	} else if limit > 1000 {
+		limit = 1000
+	}
 	offset := (page - 1) * limit
 
 	var logs []models.AuditLog
@@ -579,7 +651,16 @@ func ImportIncomes(c *gin.Context) {
 	}
 
 	if len(incomes) > 0 {
-		database.DB.Create(&incomes)
+		err := database.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Create(&incomes).Error; err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to import incomes due to database error"})
+			return
+		}
 		logAudit(c, "IMPORT", "Income", uint(projectId), fmt.Sprintf("Imported %d incomes", len(incomes)))
 	}
 
@@ -641,7 +722,16 @@ func ImportExpenses(c *gin.Context) {
 	}
 
 	if len(expenses) > 0 {
-		database.DB.Create(&expenses)
+		err := database.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Create(&expenses).Error; err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to import expenses due to database error"})
+			return
+		}
 		logAudit(c, "IMPORT", "Expense", uint(projectId), fmt.Sprintf("Imported %d expenses", len(expenses)))
 	}
 

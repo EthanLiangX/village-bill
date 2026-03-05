@@ -2,13 +2,22 @@ package middleware
 
 import (
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var JwtSecret = []byte("village-bill-super-secret-key")
+var JwtSecret []byte
+
+func init() {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "village-bill-super-secret-key" // fallback for development
+	}
+	JwtSecret = []byte(secret)
+}
 
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {

@@ -47,7 +47,15 @@ func GetIncomes(c *gin.Context) {
 	}
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if limit < 1 {
+		limit = 50
+	} else if limit > 1000 {
+		limit = 1000
+	}
 	offset := (page - 1) * limit
 
 	var incomes []models.Income
@@ -77,7 +85,15 @@ func GetExpenses(c *gin.Context) {
 	}
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if limit < 1 {
+		limit = 50
+	} else if limit > 1000 {
+		limit = 1000
+	}
 	offset := (page - 1) * limit
 
 	var expenses []models.Expense
