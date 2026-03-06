@@ -4,3 +4,4 @@
 uploads
 *.err
 *.txt
+.env

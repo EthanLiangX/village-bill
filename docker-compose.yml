@@ -19,8 +19,9 @@ services:
       # 映射日志文件以便于在宿主机上查看
       - ./logs.txt:/app/logs.txt
       - ./logs.err:/app/logs.err
+    env_file:
+      - .env
     # 设置时区和数据库路径参数
     environment:
       - TZ=Asia/Shanghai
       - DB_PATH=data/village-bill.db
-      - JWT_SECRET=c2f30b91d3cc27cfec349a2a3e5c70df71a3980b # Change this in production
